@@ -141,6 +141,20 @@ Optional sources:
 - CoinGecko, CoinMarketCap, CryptoCompare, DexScreener (enabled automatically if keys are present).
 - DEXTools/Codex can be added by setting `DEXTOOLS_TOKEN_LIST_URL` / `CODEX_TOKEN_LIST_URL` in `.env`.
 
+### Fallback market snapshots (fast DB warmup)
+
+To populate the UI quickly, the ingestors also run a low-frequency snapshot fetch:
+
+- CoinGecko "top markets" snapshot (single call, default 100 symbols).
+- CryptoCompare multi-price snapshot for a configurable symbol list.
+
+Tune the behavior in `.env` (or via the Admin panel overrides):
+
+- `FALLBACK_POLL_INTERVAL_MS` (default 300000 / 5 minutes)
+- `FALLBACK_SYMBOLS` (comma separated)
+- `COINGECKO_MARKETS_FALLBACK`, `COINGECKO_MARKETS_LIMIT`, `COINGECKO_MARKETS_VS`, `COINGECKO_MARKETS_QUOTE`
+- `CRYPTOCOMPARE_SYMBOLS`
+
 ### Manual database installation (Ubuntu/Debian)
 
 If you prefer to install the databases manually, use the keyserver-based ClickHouse repo setup below (the direct GPG URL may return 403). If you already added a broken ClickHouse key, remove it first:

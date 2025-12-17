@@ -2,12 +2,13 @@ import { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { MarketService } from '../services/marketService.js';
 import { TokenCatalogService } from '../services/tokenCatalogService.js';
+import { ConfigService } from '../services/configService.js';
 
 export async function registerV1Routes(
   fastify: FastifyInstance,
-  opts: { marketService: MarketService; tokenCatalogService: TokenCatalogService }
+  opts: { marketService: MarketService; tokenCatalogService: TokenCatalogService; configService: ConfigService }
 ) {
-  const { marketService, tokenCatalogService } = opts;
+  const { marketService, tokenCatalogService, configService } = opts;
 
   fastify.get('/resolve', async (request, reply) => {
     const schema = z.object({
@@ -94,6 +95,15 @@ export async function registerV1Routes(
   fastify.post('/tokens/refresh', async () => {
     fastify.log.info('Manual token refresh requested');
     return tokenCatalogService.refreshTokens({ force: true });
+  });
+
+  fastify.get('/config', async () => {
+    return configService.getEffectiveConfig();
+  });
+
+  fastify.post('/config', async (request) => {
+    const payload = request.body as Record<string, unknown>;
+    return configService.updateConfig(payload ?? {});
   });
 
   fastify.get('/status', async () => {

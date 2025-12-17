@@ -3,6 +3,8 @@ import { TokenRefreshButton } from '../../components/TokenRefreshButton';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? 'http://localhost:3333';
 
+export const dynamic = 'force-dynamic';
+
 async function fetchStatus() {
   try {
     const res = await fetch(`${API_BASE}/v1/status`, { cache: 'no-store' });
@@ -37,7 +39,11 @@ export default async function StatusPage() {
       <div className="grid gap-4 md:grid-cols-3">
         <StatCard title="Redis" value={redis.status ?? 'unknown'} subtitle={`${redis.keysTotal ?? 0} keys`} />
         <StatCard title="ClickHouse" value={clickhouse.status ?? 'unknown'} subtitle={`${clickhouse.candlesRows ?? 0} candle rows`} />
-        <StatCard title="Postgres" value={postgres.status ?? 'unknown'} subtitle={`${postgres.assets ?? 0} assets`} />
+        <StatCard
+          title="Postgres"
+          value={postgres.status ?? 'unknown'}
+          subtitle={`${postgres.tokens ?? 0} tokens · ${postgres.assets ?? 0} assets`}
+        />
       </div>
 
       <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 space-y-4">

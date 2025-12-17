@@ -12,17 +12,9 @@ export class IngestionOrchestrator {
   private readonly redis = getRedisClient();
   private readonly candleRepo = new CandleRepository();
   private readonly rollingCandles = new Map<string, CandleEvent>();
+  private initialized = false;
 
   constructor() {
-    this.registerConnector(new BinanceSpotConnector());
-    this.registerConnector(new BybitConnector());
-
-    if (process.env.ENABLE_COINGECKO_FALLBACK !== 'false') {
-      this.registerConnector(new CoinGeckoFallbackConnector());
-    }
-    if (process.env.ENABLE_CRYPTOCOMPARE_FALLBACK !== 'false') {
-      this.registerConnector(new CryptoCompareFallbackConnector());
-    }
   }
 
   private registerConnector(connector: MarketConnector) {
@@ -31,6 +23,11 @@ export class IngestionOrchestrator {
   }
 
   async start() {
+    await this.applyOverrides();
+    if (!this.initialized) {
+      this.initConnectors();
+      this.initialized = true;
+    }
     this.logger.info(
       {
         connectors: this.connectors.length,
@@ -44,6 +41,32 @@ export class IngestionOrchestrator {
 
   async stop() {
     await Promise.all(this.connectors.map((connector) => connector.stop()));
+  }
+
+  private initConnectors() {
+    this.registerConnector(new BinanceSpotConnector());
+    this.registerConnector(new BybitConnector());
+
+    if (process.env.ENABLE_COINGECKO_FALLBACK !== 'false') {
+      this.registerConnector(new CoinGeckoFallbackConnector());
+    }
+    if (process.env.ENABLE_CRYPTOCOMPARE_FALLBACK !== 'false') {
+      this.registerConnector(new CryptoCompareFallbackConnector());
+    }
+  }
+
+  private async applyOverrides() {
+    try {
+      const overrides = await this.redis.hgetall('config:overrides');
+      if (!overrides || Object.keys(overrides).length === 0) return;
+      for (const [key, value] of Object.entries(overrides)) {
+        if (value === undefined || value === null || value === '') continue;
+        process.env[key] = String(value);
+      }
+      this.logger.info({ keys: Object.keys(overrides) }, 'applied runtime overrides');
+    } catch (err) {
+      this.logger.warn({ err }, 'failed to load runtime overrides');
+    }
   }
 
   private async handleEvent(event: MarketEvent) {

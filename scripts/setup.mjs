@@ -256,6 +256,13 @@ const defaults = {
   enableCg: true,
   enableCc: true,
   fallbackPoll: '300000',
+  fallbackSymbols: 'BTC,ETH,SOL,BNB,XRP,ADA,DOGE',
+  coingeckoMarketsFallback: true,
+  coingeckoMarketsLimit: '100',
+  coingeckoMarketsVs: 'usd',
+  coingeckoMarketsQuote: 'USD',
+  coingeckoIds: 'BTC:bitcoin,ETH:ethereum',
+  cryptocompareSymbols: 'BTC,ETH,SOL',
 };
 
 (async () => {
@@ -333,6 +340,13 @@ const defaults = {
     const enableCg = await yesNo('Enable CoinGecko fallback?', true);
     const enableCc = await yesNo('Enable CryptoCompare fallback?', true);
     const fallbackPoll = await ask('Fallback poll interval (ms)', defaults.fallbackPoll, '>= 300000 (5 minutes) recommended');
+    const fallbackSymbols = defaults.fallbackSymbols;
+    const coingeckoMarketsFallback = defaults.coingeckoMarketsFallback;
+    const coingeckoMarketsLimit = defaults.coingeckoMarketsLimit;
+    const coingeckoMarketsVs = defaults.coingeckoMarketsVs;
+    const coingeckoMarketsQuote = defaults.coingeckoMarketsQuote;
+    const coingeckoIds = defaults.coingeckoIds;
+    const cryptocompareSymbols = defaults.cryptocompareSymbols;
 
     config = {
       nodeEnv,
@@ -362,6 +376,13 @@ const defaults = {
       enableCg,
       enableCc,
       fallbackPoll,
+      fallbackSymbols,
+      coingeckoMarketsFallback,
+      coingeckoMarketsLimit,
+      coingeckoMarketsVs,
+      coingeckoMarketsQuote,
+      coingeckoIds,
+      cryptocompareSymbols,
     };
 
     const content = `NODE_ENV=${config.nodeEnv}
@@ -400,6 +421,13 @@ ENABLE_COINGECKO_FALLBACK=${config.enableCg}
 ENABLE_CRYPTOCOMPARE_FALLBACK=${config.enableCc}
 MAX_FALLBACK_CALLS_PER_MINUTE=2
 FALLBACK_POLL_INTERVAL_MS=${config.fallbackPoll}
+FALLBACK_SYMBOLS=${config.fallbackSymbols}
+COINGECKO_MARKETS_FALLBACK=${config.coingeckoMarketsFallback}
+COINGECKO_MARKETS_LIMIT=${config.coingeckoMarketsLimit}
+COINGECKO_MARKETS_VS=${config.coingeckoMarketsVs}
+COINGECKO_MARKETS_QUOTE=${config.coingeckoMarketsQuote}
+COINGECKO_IDS=${config.coingeckoIds}
+CRYPTOCOMPARE_SYMBOLS=${config.cryptocompareSymbols}
 
 NEXT_PUBLIC_API_BASE=http://localhost:${config.apiPort}
 NEXT_PUBLIC_WS_URL=ws://localhost:${config.apiPort}/v1/ws
@@ -421,6 +449,13 @@ NEXT_PUBLIC_WS_URL=ws://localhost:${config.apiPort}/v1/ws
       pgUser: existingEnv.PG_USER ?? defaults.pgUser,
       pgPassword: existingEnv.PG_PASSWORD ?? defaults.pgPassword,
       pgDatabase: existingEnv.PG_DATABASE ?? defaults.pgDatabase,
+      fallbackSymbols: existingEnv.FALLBACK_SYMBOLS ?? defaults.fallbackSymbols,
+      coingeckoMarketsFallback: existingEnv.COINGECKO_MARKETS_FALLBACK ?? defaults.coingeckoMarketsFallback,
+      coingeckoMarketsLimit: existingEnv.COINGECKO_MARKETS_LIMIT ?? defaults.coingeckoMarketsLimit,
+      coingeckoMarketsVs: existingEnv.COINGECKO_MARKETS_VS ?? defaults.coingeckoMarketsVs,
+      coingeckoMarketsQuote: existingEnv.COINGECKO_MARKETS_QUOTE ?? defaults.coingeckoMarketsQuote,
+      coingeckoIds: existingEnv.COINGECKO_IDS ?? defaults.coingeckoIds,
+      cryptocompareSymbols: existingEnv.CRYPTOCOMPARE_SYMBOLS ?? defaults.cryptocompareSymbols,
     };
   }
 

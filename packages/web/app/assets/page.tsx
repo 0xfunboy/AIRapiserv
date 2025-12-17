@@ -1,8 +1,11 @@
 import { AssetSearch } from '../../components/AssetSearch';
+import { TokenRefreshButton } from '../../components/TokenRefreshButton';
+
+export const dynamic = 'force-dynamic';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? 'http://localhost:3333';
 
-async function fetchMarkets() {
+async function fetchMarkets(): Promise<any[]> {
   try {
     const res = await fetch(`${API_BASE}/v1/markets`, { cache: 'no-store' });
     if (!res.ok) return [];
@@ -14,7 +17,7 @@ async function fetchMarkets() {
   }
 }
 
-async function fetchTokens() {
+async function fetchTokens(): Promise<any[]> {
   try {
     const res = await fetch(`${API_BASE}/v1/tokens?limit=120`, { cache: 'no-store' });
     if (!res.ok) return [];
@@ -28,13 +31,19 @@ async function fetchTokens() {
 export default async function AssetsPage() {
   const markets = await fetchMarkets();
   const tokens = await fetchTokens();
-  const symbols = Array.from(new Set(markets.map((market: any) => market.symbol))).slice(0, 30);
+  const symbols: string[] = Array.from(
+    new Set(markets.map((market: any) => (market.symbol ? String(market.symbol) : '')).filter(Boolean))
+  ).slice(0, 30);
 
   return (
     <section className="space-y-6">
       <div>
         <h2 className="text-2xl font-semibold">Assets</h2>
         <p className="text-sm text-slate-400">Search, resolve, and verify incoming assets</p>
+      </div>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="text-sm text-slate-400">Token catalog refresh runs every 30 minutes.</div>
+        <TokenRefreshButton />
       </div>
       <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 space-y-4">
         <h3 className="text-lg font-semibold">Live symbols (from ingestion)</h3>

@@ -1,5 +1,7 @@
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? 'http://localhost:3333';
 
+export const dynamic = 'force-dynamic';
+
 async function fetchProviders() {
   try {
     const res = await fetch(`${API_BASE}/v1/providers?marketType=spot&requestType=getLastPrice`, { cache: 'no-store' });

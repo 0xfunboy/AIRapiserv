@@ -8,6 +8,7 @@ export function AssetSearch() {
   const [query, setQuery] = useState('');
   const [contractAddress, setContractAddress] = useState('');
   const [assets, setAssets] = useState<any[]>([]);
+  const [tokens, setTokens] = useState<any[]>([]);
   const [resolution, setResolution] = useState<any | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -29,6 +30,15 @@ export function AssetSearch() {
         if (contractAddress) resolveUrl.searchParams.set('contractAddress', contractAddress);
         const res = await fetch(resolveUrl.toString());
         setResolution(res.ok ? await res.json() : null);
+      }
+
+      if (query || contractAddress) {
+        const tokenQuery = contractAddress || query;
+        const res = await fetch(`${API_BASE}/v1/tokens?q=${encodeURIComponent(tokenQuery)}`);
+        const data = res.ok ? await res.json() : [];
+        setTokens(data);
+      } else {
+        setTokens([]);
       }
     } catch (err) {
       console.error(err);
@@ -65,7 +75,7 @@ export function AssetSearch() {
         </div>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2">
+      <div className="grid gap-4 md:grid-cols-3">
         <div className="bg-slate-900 border border-slate-800 rounded-xl p-4">
           <h4 className="text-sm font-semibold text-slate-300">Resolver match</h4>
           {resolution ? (
@@ -95,6 +105,22 @@ export function AssetSearch() {
               </div>
             ))}
             {!assets.length && <p className="text-xs text-slate-500">No search results yet.</p>}
+          </div>
+        </div>
+        <div className="bg-slate-900 border border-slate-800 rounded-xl p-4">
+          <h4 className="text-sm font-semibold text-slate-300">Token catalog matches</h4>
+          <div className="mt-3 space-y-2 text-sm">
+            {tokens.map((token) => (
+              <div key={token.tokenKey} className="border border-slate-800 rounded-lg p-3">
+                <p className="font-semibold">
+                  {token.name ?? 'Unknown'} ({token.symbol ?? 'n/a'})
+                </p>
+                <p className="text-xs text-slate-400">Chain: {token.chain ?? 'n/a'}</p>
+                <p className="text-xs text-slate-400">CA: {token.contractAddress ?? 'n/a'}</p>
+                <p className="text-xs text-slate-500">Sources: {(token.sources ?? []).join(', ') || 'n/a'}</p>
+              </div>
+            ))}
+            {!tokens.length && <p className="text-xs text-slate-500">No token catalog matches.</p>}
           </div>
         </div>
       </div>

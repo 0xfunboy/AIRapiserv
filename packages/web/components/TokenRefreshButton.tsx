@@ -7,13 +7,18 @@ const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? 'http://localhost:3333';
 export function TokenRefreshButton() {
   const [status, setStatus] = useState<'idle' | 'running' | 'done' | 'error'>('idle');
   const [errorMessage, setErrorMessage] = useState('');
+  const [resultMessage, setResultMessage] = useState('');
 
   const run = async () => {
     setStatus('running');
     setErrorMessage('');
+    setResultMessage('');
     try {
       const res = await fetch(`${API_BASE}/v1/tokens/refresh`, { method: 'POST' });
       if (res.ok) {
+        const data = await res.json();
+        const sources = Array.isArray(data?.sources) ? data.sources.join(', ') : 'n/a';
+        setResultMessage(`Updated ${data?.tokens ?? 0} tokens · ${sources}`);
         setStatus('done');
         return;
       }
@@ -48,6 +53,7 @@ export function TokenRefreshButton() {
         {label}
       </button>
       {status === 'error' && <p className="text-xs text-rose-400">{errorMessage}</p>}
+      {status === 'done' && resultMessage && <p className="text-xs text-emerald-300">{resultMessage}</p>}
     </div>
   );
 }

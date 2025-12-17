@@ -3,7 +3,7 @@ const nextConfig = {
   output: 'standalone',
   reactStrictMode: true,
   experimental: {
-    typedRoutes: true,
+    typedRoutes: false,
   },
 };
 

@@ -131,12 +131,26 @@ const getPidsForPort = async (port) => {
   return [];
 };
 
+const findAvailablePort = async (startPort, attempts = 20) => {
+  for (let i = 0; i < attempts; i += 1) {
+    const candidate = startPort + i;
+    const inUse = await testConnection('127.0.0.1', candidate, 300);
+    if (!inUse) return candidate;
+  }
+  return null;
+};
+
 const ensurePortFree = async (name, port) => {
   const inUse = await testConnection('127.0.0.1', port, 500);
   if (!inUse) return;
 
   console.log(`\n${name} port ${port} is already in use.`);
   if (!isInteractive) {
+    const fallback = await findAvailablePort(port + 1);
+    if (fallback) {
+      console.log(`Using ${name} port ${fallback} for this run.`);
+      return fallback;
+    }
     console.log(`Stop the existing process or change ${name.toUpperCase()}_PORT, then rerun ./start.`);
     await rl.close();
     process.exit(1);
@@ -144,6 +158,11 @@ const ensurePortFree = async (name, port) => {
 
   const wantsKill = await yesNo('Terminate the existing process on that port now?', true);
   if (!wantsKill) {
+    const fallback = await findAvailablePort(port + 1);
+    if (fallback) {
+      console.log(`Using ${name} port ${fallback} for this run.`);
+      return fallback;
+    }
     console.log(`Stop the existing process or change ${name.toUpperCase()}_PORT, then rerun ./start.`);
     await rl.close();
     process.exit(1);
@@ -151,6 +170,11 @@ const ensurePortFree = async (name, port) => {
 
   const pids = await getPidsForPort(port);
   if (!pids.length) {
+    const fallback = await findAvailablePort(port + 1);
+    if (fallback) {
+      console.log(`Could not identify the process. Using ${name} port ${fallback} for this run.`);
+      return fallback;
+    }
     console.log('Could not identify the process. Stop it manually and rerun ./start.');
     await rl.close();
     process.exit(1);
@@ -161,6 +185,19 @@ const ensurePortFree = async (name, port) => {
   const stillInUse = await testConnection('127.0.0.1', port, 500);
   if (stillInUse) {
     await runCommand('kill', ['-KILL', ...pids]);
+    await wait(300);
+  }
+
+  const freed = !(await testConnection('127.0.0.1', port, 500));
+  if (!freed) {
+    const fallback = await findAvailablePort(port + 1);
+    if (fallback) {
+      console.log(`Port ${port} is still in use. Using ${name} port ${fallback} for this run.`);
+      return fallback;
+    }
+    console.log(`Port ${port} is still in use. Stop it manually and rerun ./start.`);
+    await rl.close();
+    process.exit(1);
   }
 };
 
@@ -326,10 +363,29 @@ const resetPostgresCredentials = async (env) => {
     process.exit(1);
   }
 
-  const apiPort = Number(env.API_PORT ?? '3333');
-  const webPort = Number(env.WEB_PORT ?? env.PORT ?? '3000');
-  await ensurePortFree('API', apiPort);
-  await ensurePortFree('WEB', webPort);
+  let apiPort = Number(env.API_PORT ?? '3333');
+  let webPort = Number(env.WEB_PORT ?? env.PORT ?? '3000');
+  const resolvedApiPort = await ensurePortFree('API', apiPort);
+  if (resolvedApiPort) {
+    apiPort = resolvedApiPort;
+  }
+  const resolvedWebPort = await ensurePortFree('WEB', webPort);
+  if (resolvedWebPort) {
+    webPort = resolvedWebPort;
+  }
+
+  if (apiPort !== Number(env.API_PORT ?? '3333')) {
+    console.log(`API will run on port ${apiPort} for this session.`);
+  }
+  process.env.API_PORT = String(apiPort);
+  process.env.NEXT_PUBLIC_API_BASE = `http://localhost:${apiPort}`;
+  process.env.NEXT_PUBLIC_WS_URL = `ws://localhost:${apiPort}/v1/ws`;
+
+  if (webPort !== Number(env.WEB_PORT ?? env.PORT ?? '3000')) {
+    console.log(`WebGUI will run on port ${webPort} for this session.`);
+  }
+  process.env.WEB_PORT = String(webPort);
+  process.env.PORT = String(webPort);
 
   const pgAuth = await checkPostgresAuth(env);
   if (!pgAuth.ok) {
@@ -396,7 +452,15 @@ const resetPostgresCredentials = async (env) => {
   }
 
   console.log('\nStarting the dev stack (API + ingestion + WebGUI)...');
-  await runCommand('pnpm', ['dev'], { env: { ...process.env, PORT: String(webPort) } });
+  await runCommand('pnpm', ['dev'], {
+    env: {
+      ...process.env,
+      PORT: String(webPort),
+      API_PORT: String(apiPort),
+      NEXT_PUBLIC_API_BASE: process.env.NEXT_PUBLIC_API_BASE ?? `http://localhost:${apiPort}`,
+      NEXT_PUBLIC_WS_URL: process.env.NEXT_PUBLIC_WS_URL ?? `ws://localhost:${apiPort}/v1/ws`,
+    },
+  });
 
   await rl.close();
 })().catch((err) => {

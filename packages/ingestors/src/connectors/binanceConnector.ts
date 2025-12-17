@@ -15,7 +15,8 @@ export class BinanceSpotConnector extends BaseConnector {
 
   async start() {
     const url = process.env.BINANCE_WS_URL ?? 'wss://stream.binance.com:9443/ws';
-    const streamName = this.symbols.map((s) => `${s}@trade`).join('/');
+    const streams = this.symbols.flatMap((symbol) => [`${symbol}@trade`, `${symbol}@ticker`]);
+    const streamName = streams.join('/');
     this.stream = new WebSocket(`${url}/${streamName}`);
 
     this.stream.on('open', () => this.logger.info({ symbols: this.symbols }, 'Binance WS connected'));

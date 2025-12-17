@@ -1,15 +1,27 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import {
+  Chart as ChartJS,
+  CategoryScale,
+  LinearScale,
+  PointElement,
+  LineElement,
+  Tooltip,
+  Legend,
+} from 'chart.js';
+import { Line } from 'react-chartjs-2';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? 'http://localhost:3333';
 
 const intervals = ['1s', '5s', '1m', '5m'] as const;
 
+ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Tooltip, Legend);
+
 export function ChartsClient() {
   const [markets, setMarkets] = useState<any[]>([]);
   const [marketId, setMarketId] = useState('');
-  const [interval, setInterval] = useState<(typeof intervals)[number]>('1s');
+  const [interval, setIntervalValue] = useState<(typeof intervals)[number]>('1s');
   const [candles, setCandles] = useState<any[]>([]);
 
   useEffect(() => {
@@ -30,7 +42,7 @@ export function ChartsClient() {
 
   useEffect(() => {
     if (!marketId) return;
-    let timer: NodeJS.Timeout;
+    let timer: ReturnType<typeof setInterval> | undefined;
     const loadCandles = async () => {
       try {
         const res = await fetch(
@@ -46,7 +58,9 @@ export function ChartsClient() {
     loadCandles();
     const refreshMs = interval === '1s' ? 2000 : interval === '5s' ? 4000 : 8000;
     timer = setInterval(loadCandles, refreshMs);
-    return () => clearInterval(timer);
+    return () => {
+      if (timer) clearInterval(timer);
+    };
   }, [marketId, interval]);
 
   return (
@@ -70,12 +84,56 @@ export function ChartsClient() {
               className={`px-3 py-1 rounded-lg text-xs font-semibold ${
                 interval === value ? 'bg-emerald-500 text-slate-900' : 'bg-slate-800 text-slate-200'
               }`}
-              onClick={() => setInterval(value)}
+              onClick={() => setIntervalValue(value)}
             >
               {value}
             </button>
           ))}
         </div>
+      </div>
+      <ChartPreview candles={candles} />
+    </div>
+  );
+}
+
+function ChartPreview({ candles }: { candles: any[] }) {
+  const data = useMemo(() => {
+    const ordered = [...candles].reverse();
+    return {
+      labels: ordered.map((candle) => new Date(candle.startTs).toLocaleTimeString()),
+      datasets: [
+        {
+          label: 'Close',
+          data: ordered.map((candle) => candle.close),
+          borderColor: '#10b981',
+          backgroundColor: 'rgba(16, 185, 129, 0.2)',
+          tension: 0.25,
+        },
+      ],
+    };
+  }, [candles]);
+
+  if (!candles.length) {
+    return <p className="text-sm text-slate-500">No candles yet for this market.</p>;
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="h-64">
+        <Line
+          data={data}
+          options={{
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+              legend: { display: false },
+            },
+            scales: {
+              x: { ticks: { color: '#94a3b8' } },
+              y: { ticks: { color: '#94a3b8' } },
+            },
+          }}
+        />
       </div>
       <div className="grid gap-3 md:grid-cols-2 text-sm">
         {candles.slice(0, 12).map((candle) => (
@@ -86,7 +144,6 @@ export function ChartsClient() {
             </p>
           </div>
         ))}
-        {!candles.length && <p className="text-sm text-slate-500">No candles yet for this market.</p>}
       </div>
     </div>
   );

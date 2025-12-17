@@ -15,6 +15,8 @@ All endpoints live under `/v1`. Public access uses JWT (`Authorization: Bearer <
 | `GET /v1/markets` | `limit?` | Active markets detected in Redis |
 | `GET /v1/tokens` | `q?`, `limit?`, `offset?` | Token catalog search |
 | `POST /v1/tokens/refresh` | - | Force token catalog refresh |
+| `GET /v1/config` | - | Runtime config (safe subset, keys redacted) |
+| `POST /v1/config` | JSON body | Update runtime config overrides |
 | `GET /v1/status` | - | Storage status + counts + active markets |
 | `GET /v1/health` | - | Health of Redis / ClickHouse / Postgres |
 

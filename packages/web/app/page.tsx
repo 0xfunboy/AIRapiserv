@@ -3,6 +3,8 @@ import { LiveTicker } from '../components/LiveTicker';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? 'http://localhost:3333';
 
+export const dynamic = 'force-dynamic';
+
 async function fetchStatus() {
   try {
     const res = await fetch(`${API_BASE}/v1/status`, { cache: 'no-store' });
@@ -32,7 +34,11 @@ export default async function DashboardPage() {
       <div className="grid gap-4 md:grid-cols-3">
         <StatCard title="Redis" value={health.redis} subtitle={`${redis.keysTotal ?? 0} keys`} />
         <StatCard title="ClickHouse" value={health.clickhouse} subtitle={`${status?.clickhouse?.candlesRows ?? 0} rows`} />
-        <StatCard title="Postgres" value={health.postgres} subtitle={`${status?.postgres?.assets ?? 0} assets`} />
+        <StatCard
+          title="Postgres"
+          value={health.postgres}
+          subtitle={`${status?.postgres?.tokens ?? 0} tokens · ${status?.postgres?.assets ?? 0} assets`}
+        />
       </div>
       <div className="grid gap-4 md:grid-cols-2">
         <LiveTicker marketId={primaryMarket} />
