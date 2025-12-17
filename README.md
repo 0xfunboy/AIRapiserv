@@ -2,22 +2,61 @@
 
 AIRapiserv is the market-data gateway consumed by AIRTrack. It exposes a stable REST/WebSocket interface while orchestrating multiple providers, normalising events and persisting them in three specialised databases.
 
-## Quick start
+## Quick start (beginner friendly)
 
-The fastest path is a single command:
+These steps are written for people with zero devops experience. Copy/paste in order.
+
+### 1) Prerequisites
+
+- Linux/macOS (Ubuntu/Debian recommended for automatic DB install)
+- Node.js 23.3
+- pnpm
+- sudo access (only required if you want the wizard to install Redis/ClickHouse/Postgres)
+
+Install Node 23.3 with nvm (recommended):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash
+export NVM_DIR="$HOME/.nvm"
+[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+nvm install 23.3.0
+nvm use 23.3.0
+```
+
+Install pnpm:
+
+```bash
+corepack enable
+corepack prepare pnpm@9.0.0 --activate
+```
+
+### 2) Clone the repo
+
+```bash
+git clone https://github.com/0xfunboy/AIRapiserv.git
+cd AIRapiserv
+```
+
+### 3) Install dependencies
+
+```bash
+pnpm install
+```
+
+### 4) Run the one-command bootstrap
 
 ```bash
 ./start
 ```
 
-`./start` will:
-- prompt you to run the installer if `.env` is missing,
-- install dependencies if needed,
-- verify Redis/ClickHouse/Postgres connectivity,
-- run migrations,
-- launch the dev stack (API + ingestors + WebGUI).
+What `./start` does:
+- creates `.env` if missing (via the wizard),
+- optionally installs Redis/ClickHouse/Postgres (if you answer yes),
+- checks DB connectivity,
+- runs migrations,
+- starts the API + ingestors + WebGUI.
 
-If you prefer to run the installer directly:
+If you want to run the installer directly:
 
 ```bash
 ./setup
@@ -76,7 +115,7 @@ Additional documentation lives in `docs/`:
 - WebGUI with dashboard, assets, markets, charts, compare and admin placeholders
 - Operational docs for AIRTrack compatibility
 
-### Setup wizard
+### Setup wizard (local or external DBs)
 
 `./setup` (or `pnpm project:setup`) walks the user through the entire configuration:
 
@@ -84,7 +123,7 @@ Additional documentation lives in `docs/`:
 - proposes defaults and generates the `JWT_SECRET` automatically;
 - lets you enable/disable fallback providers and enforces poll intervals;
 - writes the `.env` file and prints the next steps (e.g. `pnpm db:migrate`, `pnpm dev`);
-- if requested, installs and starts Redis/ClickHouse/Postgres through `sudo apt-get install`, enables systemd units and creates Postgres role/database with the provided credentials;
+- if requested, installs and starts Redis/ClickHouse/Postgres through `sudo apt-get install`, enables systemd units, configures ClickHouse auth and creates the Postgres role/database with the provided credentials;
 - runs reachability checks and highlights actionable tips when a service is down.
 
 With these safeguards AIRapiserv can be handed to customers that have zero operational experience.
@@ -146,6 +185,37 @@ sudo -u postgres psql -v ON_ERROR_STOP=1 -c "CREATE DATABASE airapiserv OWNER ai
 ```
 
 `./start` will also prompt you to reset the Postgres credentials automatically if it detects a mismatch.
+
+### Common troubleshooting
+
+1) ClickHouse auth errors in `pnpm db:migrate`
+
+- Ensure `.env` has:
+  - `CLICKHOUSE_URL=http://127.0.0.1:8123`
+  - `CLICKHOUSE_USER=default`
+  - `CLICKHOUSE_PASSWORD=airapiserv`
+- If ClickHouse was installed manually, set the password file and restart:
+
+```bash
+sudo tee /etc/clickhouse-server/users.d/airapiserv-default.xml >/dev/null <<'EOF'
+<clickhouse>
+  <users>
+    <default>
+      <password>airapiserv</password>
+    </default>
+  </users>
+</clickhouse>
+EOF
+sudo rm -f /etc/clickhouse-server/users.d/default-password.xml
+sudo systemctl restart clickhouse-server
+```
+
+2) Postgres auth errors in `./start`
+
+```bash
+sudo -u postgres psql -v ON_ERROR_STOP=1 -c "ALTER USER airapiserv WITH PASSWORD 'airapiserv';"
+sudo -u postgres psql -v ON_ERROR_STOP=1 -c "CREATE DATABASE airapiserv OWNER airapiserv;"
+```
 
 ## Production checklist
 
