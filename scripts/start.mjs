@@ -139,8 +139,15 @@ const ensureDependencies = async () => {
 const checkServices = async (env) => {
   const redisUrl = env.REDIS_URL ?? 'redis://127.0.0.1:6379/0';
   const clickhouseUrl = env.CLICKHOUSE_URL ?? 'http://127.0.0.1:8123';
-  const pgHost = env.PG_HOST ?? '127.0.0.1';
-  const pgPort = env.PG_PORT ?? '5432';
+  let pgHost = env.PG_HOST ?? '127.0.0.1';
+  let pgPort = env.PG_PORT ?? '5432';
+  if (env.DATABASE_URL) {
+    try {
+      const url = new URL(env.DATABASE_URL);
+      pgHost = url.hostname || pgHost;
+      pgPort = url.port || pgPort;
+    } catch {}
+  }
 
   let redisHost = '127.0.0.1';
   let redisPort = '6379';
@@ -194,20 +201,34 @@ const checkPostgresAuth = async (env) => {
     if (!Client) {
       return { ok: false, reason: 'pg-missing' };
     }
-    const client = new Client({ host, port, user, password, database });
+    const client = env.DATABASE_URL
+      ? new Client({ connectionString: env.DATABASE_URL })
+      : new Client({ host, port, user, password, database });
     await client.connect();
     await client.query('select 1;');
     await client.end();
     return { ok: true };
   } catch (err) {
+    if (err?.code === 'ERR_MODULE_NOT_FOUND') {
+      return { ok: false, reason: 'pg-missing', error: err };
+    }
     return { ok: false, reason: err?.code || 'auth-failed', error: err };
   }
 };
 
 const resetPostgresCredentials = async (env) => {
-  const user = env.PG_USER ?? 'airapiserv';
-  const password = env.PG_PASSWORD ?? 'airapiserv';
-  const database = env.PG_DATABASE ?? 'airapiserv';
+  let user = env.PG_USER ?? 'airapiserv';
+  let password = env.PG_PASSWORD ?? 'airapiserv';
+  let database = env.PG_DATABASE ?? 'airapiserv';
+  if (env.DATABASE_URL) {
+    try {
+      const url = new URL(env.DATABASE_URL);
+      user = url.username || user;
+      password = url.password ? decodeURIComponent(url.password) : password;
+      const dbName = url.pathname?.replace(/^\//, '');
+      if (dbName) database = dbName;
+    } catch {}
+  }
   const safeUser = user.replace(/'/g, "''");
   const safePassword = password.replace(/'/g, "''");
   const safeDb = database.replace(/'/g, "''");
@@ -254,6 +275,11 @@ const resetPostgresCredentials = async (env) => {
 
   const pgAuth = await checkPostgresAuth(env);
   if (!pgAuth.ok) {
+    if (pgAuth.reason === 'pg-missing') {
+      console.log('\nPostgres driver missing. Run pnpm install, then rerun ./start.');
+      await rl.close();
+      process.exit(1);
+    }
     console.log('\nPostgres authentication failed with the credentials in .env.');
     if (!isInteractive) {
       console.log('Run ./setup or reset the Postgres password, then rerun ./start.');
@@ -281,17 +307,31 @@ const resetPostgresCredentials = async (env) => {
     const apiProc = spawn('pnpm', ['--filter', 'api', 'start'], { stdio: 'inherit' });
     const apiPort = env.API_PORT ?? '3333';
     const healthUrl = `http://127.0.0.1:${apiPort}/v1/health`;
-    const apiExit = new Promise((resolve) => apiProc.on('exit', resolve));
+    let apiExited = false;
+    const apiExit = new Promise((resolve) => {
+      apiProc.on('exit', (code) => {
+        apiExited = true;
+        resolve(code);
+      });
+    });
 
     const healthy = await waitForHealth(healthUrl);
-    if (!healthy) {
+    const stopApi = async () => {
+      if (apiExited) return;
       apiProc.kill('SIGTERM');
-      await apiExit;
+      await Promise.race([apiExit, wait(5000)]);
+      if (!apiExited) {
+        apiProc.kill('SIGKILL');
+        await apiExit;
+      }
+    };
+
+    if (!healthy) {
+      await stopApi();
       throw new Error(`API did not become healthy at ${healthUrl}`);
     }
 
-    apiProc.kill('SIGTERM');
-    await apiExit;
+    await stopApi();
     console.log('Smoke test passed.');
     await rl.close();
     process.exit(0);

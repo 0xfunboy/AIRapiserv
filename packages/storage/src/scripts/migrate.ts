@@ -1,7 +1,7 @@
-import 'dotenv/config';
 import { getPgPool } from '../clients/postgresClient.js';
 import { getClickHouseClient } from '../clients/clickhouseClient.js';
 import { getRedisClient } from '../clients/redisClient.js';
+import { loadEnv } from '../config/loadEnv.js';
 
 const parseRedisTarget = () => {
   const redisUrl = process.env.REDIS_URL ?? 'redis://127.0.0.1:6379/0';
@@ -23,22 +23,33 @@ const parseClickhouseTarget = () => {
   }
 };
 
-const parsePostgresTarget = () => ({
-  host: process.env.PG_HOST ?? '127.0.0.1',
-  port: process.env.PG_PORT ?? '5432',
-});
+const parsePostgresTarget = () => {
+  if (process.env.DATABASE_URL) {
+    try {
+      const url = new URL(process.env.DATABASE_URL);
+      return { host: url.hostname || '127.0.0.1', port: url.port || '5432' };
+    } catch {}
+  }
+  return {
+    host: process.env.PG_HOST ?? '127.0.0.1',
+    port: process.env.PG_PORT ?? '5432',
+  };
+};
 
 async function checkConnections() {
+  loadEnv();
   const failures: string[] = [];
   const redisTarget = parseRedisTarget();
   const clickTarget = parseClickhouseTarget();
   const pgTarget = parsePostgresTarget();
+  const toMessage = (err: unknown) => (err instanceof Error ? err.message : '');
+  const toCode = (err: unknown) => (err && typeof err === 'object' && 'code' in err ? err.code : undefined);
 
   try {
     const redis = getRedisClient();
     await redis.ping();
   } catch (err) {
-    const message = err?.message?.toLowerCase?.() ?? '';
+    const message = toMessage(err).toLowerCase();
     if (message.includes('wrongpass') || message.includes('noauth')) {
       failures.push('Redis authentication failed (check REDIS_URL/password).');
     } else {
@@ -51,8 +62,13 @@ async function checkConnections() {
     const result = await ch.query({ query: 'SELECT 1', format: 'JSONEachRow' });
     await result.json();
   } catch (err) {
-    const message = err?.message?.toLowerCase?.() ?? '';
+    const message = toMessage(err).toLowerCase();
     if (message.includes('authentication') || message.includes('password')) {
+      if (process.env.LOG_LEVEL === 'debug' || process.env.DEBUG === 'true') {
+        const url = process.env.CLICKHOUSE_URL ?? 'http://127.0.0.1:8123';
+        const user = process.env.CLICKHOUSE_USER ?? process.env.CLICKHOUSE_USERNAME ?? 'default';
+        console.error(`ClickHouse auth failed with URL=${url} USER=${user}`);
+      }
       failures.push('ClickHouse authentication failed (check CLICKHOUSE_USER/CLICKHOUSE_PASSWORD).');
     } else {
       failures.push(`ClickHouse not reachable at ${clickTarget.host}:${clickTarget.port}`);
@@ -63,7 +79,7 @@ async function checkConnections() {
     const pool = getPgPool();
     await pool.query('select 1;');
   } catch (err) {
-    if (err?.code === '28P01') {
+    if (toCode(err) === '28P01') {
       failures.push('Postgres authentication failed (check PG_USER/PG_PASSWORD).');
     } else {
       failures.push(`Postgres not reachable at ${pgTarget.host}:${pgTarget.port}`);
