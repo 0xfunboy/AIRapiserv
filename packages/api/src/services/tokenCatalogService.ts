@@ -1,4 +1,5 @@
 import { TokenCatalogRepository } from '@airapiserv/storage';
+import { loadEnv } from '../config/loadEnv.js';
 
 type TokenRecord = {
   tokenKey: string;
@@ -36,6 +37,7 @@ export class TokenCatalogService {
   }
 
   start() {
+    loadEnv();
     const enabled = process.env.ENABLE_TOKEN_CATALOG !== 'false';
     if (!enabled) {
       this.logger.info('Token catalog refresh disabled via ENABLE_TOKEN_CATALOG=false');
@@ -49,6 +51,7 @@ export class TokenCatalogService {
   }
 
   async refreshTokens(params: { force?: boolean } = {}) {
+    loadEnv();
     const interval = Number(process.env.TOKEN_CATALOG_REFRESH_MS ?? DEFAULT_REFRESH_MS);
     if (!params.force && this.lastRefreshAt && Date.now() - this.lastRefreshAt < interval) {
       return this.lastStats ?? {
@@ -61,6 +64,7 @@ export class TokenCatalogService {
     }
     if (this.inFlight) return this.inFlight;
 
+    this.logger.info({ force: params.force ?? false }, 'token refresh started');
     this.inFlight = this.doRefresh().finally(() => {
       this.inFlight = undefined;
     });
@@ -138,7 +142,7 @@ export class TokenCatalogService {
       lastRefreshAt: this.lastRefreshAt,
     };
 
-    this.logger.info({ tokens: tokens.length, sources }, 'token catalog refreshed');
+    this.logger.info({ tokens: tokens.length, sources, tookMs: this.lastStats.tookMs }, 'token catalog refreshed');
     return this.lastStats;
   }
 

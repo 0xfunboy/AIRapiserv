@@ -1,13 +1,15 @@
-import 'dotenv/config';
 import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import websocket from '@fastify/websocket';
 import rateLimit from '@fastify/rate-limit';
 import jwt from '@fastify/jwt';
+import { loadEnv } from './config/loadEnv.js';
 import { MarketService } from './services/marketService.js';
 import { TokenCatalogService } from './services/tokenCatalogService.js';
 import { registerV1Routes } from './routes/v1.js';
 import { registerWsGateway } from './ws/gateway.js';
+
+loadEnv();
 
 const server = Fastify({ logger: true });
 const marketService = new MarketService();

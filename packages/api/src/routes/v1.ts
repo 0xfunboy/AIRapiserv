@@ -92,6 +92,7 @@ export async function registerV1Routes(
   });
 
   fastify.post('/tokens/refresh', async () => {
+    fastify.log.info('Manual token refresh requested');
     return tokenCatalogService.refreshTokens({ force: true });
   });
 

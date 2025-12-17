@@ -31,7 +31,14 @@ export class IngestionOrchestrator {
   }
 
   async start() {
-    this.logger.info({ connectors: this.connectors.length }, 'starting ingestion connectors');
+    this.logger.info(
+      {
+        connectors: this.connectors.length,
+        binanceSymbols: process.env.BINANCE_SYMBOLS ?? 'btcusdt,ethusdt',
+        bybitSymbols: process.env.BYBIT_SYMBOLS ?? 'BTCUSDT',
+      },
+      'starting ingestion connectors'
+    );
     await Promise.all(this.connectors.map((connector) => connector.start()));
   }
 

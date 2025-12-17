@@ -1,5 +1,7 @@
-import 'dotenv/config';
 import { IngestionOrchestrator } from './services/ingestionOrchestrator.js';
+import { loadEnv } from './config/loadEnv.js';
+
+loadEnv();
 
 const orchestrator = new IngestionOrchestrator();
 
