@@ -65,6 +65,22 @@ export async function registerV1Routes(fastify: FastifyInstance, opts: { marketS
     return marketService.getProviders(query as any);
   });
 
+  fastify.get('/markets', async (request) => {
+    const schema = z.object({
+      limit: z.coerce.number().min(1).max(5000).optional(),
+    });
+    const query = schema.parse(request.query);
+    const data = await marketService.getActiveMarkets();
+    return {
+      total: data.activeMarketCount,
+      markets: query.limit ? data.markets.slice(0, query.limit) : data.markets,
+    };
+  });
+
+  fastify.get('/status', async () => {
+    return marketService.getStatus();
+  });
+
   fastify.get('/health', async () => {
     return marketService.getHealth();
   });

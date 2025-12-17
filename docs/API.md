@@ -12,14 +12,16 @@ All endpoints live under `/v1`. Public access uses JWT (`Authorization: Bearer <
 | `GET /v1/trades` | `marketId`, `limit?` | Latest normalised trades |
 | `GET /v1/search` | `q` | Asset search |
 | `GET /v1/providers` | `marketType`, `requestType`, `supportsWs?` | Provider priority for each request type |
+| `GET /v1/markets` | `limit?` | Active markets detected in Redis |
+| `GET /v1/status` | - | Storage status + counts + active markets |
 | `GET /v1/health` | - | Health of Redis / ClickHouse / Postgres |
 
 ## WebSocket `/v1/ws`
 
-Messages are JSON:
+Messages are JSON (the server normalises market IDs, so `BTCUSDT` and `BTC-USDT` both work):
 
 ```json
-{ "type": "subscribe", "channel": "ticker", "marketId": "binance:BTC-USDT:spot", "interval": "1s" }
+{ "type": "subscribe", "channel": "ticker", "marketId": "binance:BTCUSDT:spot", "interval": "1s" }
 ```
 
 Channels: `ticker`, `trades`, `candles`. The server responds with `{ "type":"update", "channel":"ticker", ... }`.
