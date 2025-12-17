@@ -138,6 +138,51 @@ const checkServices = async (env) => {
   return failures;
 };
 
+const checkPostgresAuth = async (env) => {
+  const host = env.PG_HOST ?? '127.0.0.1';
+  const port = Number(env.PG_PORT ?? '5432');
+  const user = env.PG_USER ?? 'airapiserv';
+  const password = env.PG_PASSWORD ?? 'airapiserv';
+  const database = env.PG_DATABASE ?? 'airapiserv';
+
+  try {
+    const pgModule = await import('pg');
+    const Client = pgModule.Client ?? pgModule.default?.Client;
+    if (!Client) {
+      return { ok: false, reason: 'pg-missing' };
+    }
+    const client = new Client({ host, port, user, password, database });
+    await client.connect();
+    await client.query('select 1;');
+    await client.end();
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, reason: err?.code || 'auth-failed', error: err };
+  }
+};
+
+const resetPostgresCredentials = async (env) => {
+  const user = env.PG_USER ?? 'airapiserv';
+  const password = env.PG_PASSWORD ?? 'airapiserv';
+  const database = env.PG_DATABASE ?? 'airapiserv';
+  const sqlUser = `DO $$ BEGIN
+    IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = '${user.replace(/'/g, "''")}') THEN
+      CREATE ROLE ${user} LOGIN PASSWORD '${password.replace(/'/g, "''")}';
+    ELSE
+      ALTER USER ${user} WITH PASSWORD '${password.replace(/'/g, "''")}';
+    END IF;
+  END $$;`;
+  const sqlDb = `DO $$ BEGIN
+    IF NOT EXISTS (SELECT FROM pg_database WHERE datname = '${database.replace(/'/g, "''")}') THEN
+      CREATE DATABASE ${database} OWNER ${user};
+    END IF;
+  END $$;`;
+
+  await runCommand('sudo', ['-u', 'postgres', 'psql', '-v', 'ON_ERROR_STOP=1', '-c', sqlUser]);
+  await runCommand('sudo', ['-u', 'postgres', 'psql', '-v', 'ON_ERROR_STOP=1', '-c', sqlDb]);
+  await runCommand('sudo', ['-u', 'postgres', 'psql', '-v', 'ON_ERROR_STOP=1', '-c', `GRANT ALL PRIVILEGES ON DATABASE ${database} TO ${user};`]);
+};
+
 (async () => {
   console.log('AIRapiserv start: validating environment...');
   await ensureEnv();
@@ -159,6 +204,26 @@ const checkServices = async (env) => {
     console.log('\nDatabase services are still unavailable. Fix them and rerun ./start.');
     await rl.close();
     process.exit(1);
+  }
+
+  const pgAuth = await checkPostgresAuth(env);
+  if (!pgAuth.ok) {
+    console.log('\nPostgres authentication failed with the credentials in .env.');
+    if (!isInteractive) {
+      console.log('Run ./setup or reset the Postgres password, then rerun ./start.');
+      await rl.close();
+      process.exit(1);
+    }
+    const wantsReset = await yesNo('Reset Postgres user/password now (sudo required)?', true);
+    if (wantsReset) {
+      await resetPostgresCredentials(env);
+    }
+    const retry = await checkPostgresAuth(env);
+    if (!retry.ok) {
+      console.log('Postgres authentication still failing. Fix credentials and rerun ./start.');
+      await rl.close();
+      process.exit(1);
+    }
   }
 
   console.log('\nRunning migrations...');

@@ -42,6 +42,17 @@ curl -s http://127.0.0.1:8123/ping
 sudo -u postgres psql -c "select 1;"
 ```
 
+## Postgres credential reset
+
+If `pnpm db:migrate` fails with `password authentication failed`, align the Postgres user with the `.env` values:
+
+```bash
+sudo -u postgres psql -v ON_ERROR_STOP=1 -c "ALTER USER airapiserv WITH PASSWORD 'airapiserv';"
+sudo -u postgres psql -v ON_ERROR_STOP=1 -c "CREATE DATABASE airapiserv OWNER airapiserv;"
+```
+
+`./start` will prompt to reset the credentials automatically if it detects a mismatch.
+
 ## Services
 
 | Service | Port | Script |

@@ -114,6 +114,17 @@ curl -s http://127.0.0.1:8123/ping
 sudo -u postgres psql -c "select 1;"
 ```
 
+### Postgres credential reset
+
+If migrations fail with `password authentication failed`, reset the database user to match `.env`:
+
+```bash
+sudo -u postgres psql -v ON_ERROR_STOP=1 -c "ALTER USER airapiserv WITH PASSWORD 'airapiserv';"
+sudo -u postgres psql -v ON_ERROR_STOP=1 -c "CREATE DATABASE airapiserv OWNER airapiserv;"
+```
+
+`./start` will also prompt you to reset the Postgres credentials automatically if it detects a mismatch.
+
 ## Production checklist
 
 1. Store secrets in a vault (AWS SSM, Doppler, etc.).
