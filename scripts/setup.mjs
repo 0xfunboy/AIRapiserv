@@ -366,7 +366,7 @@ const defaults = {
 
     const content = `NODE_ENV=${config.nodeEnv}
 LOG_LEVEL=info
-PORT=3000
+PORT=${config.webPort}
 WEB_PORT=${config.webPort}
 API_PORT=${config.apiPort}
 INGESTION_WORKER_CONCURRENCY=${config.ingestionConcurrency}

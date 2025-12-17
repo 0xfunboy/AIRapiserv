@@ -111,6 +111,59 @@ const testConnection = (host, port, timeoutMs = 3000) =>
     });
   });
 
+const getPidsForPort = async (port) => {
+  try {
+    const { stdout } = await runCommandCapture('lsof', ['-ti', `tcp:${port}`]);
+    const pids = stdout
+      .split('\n')
+      .map((line) => line.trim())
+      .filter(Boolean);
+    if (pids.length) return pids;
+  } catch {}
+  try {
+    const { stdout } = await runCommandCapture('fuser', ['-n', 'tcp', `${port}`]);
+    const pids = stdout
+      .split(' ')
+      .map((line) => line.trim())
+      .filter(Boolean);
+    if (pids.length) return pids;
+  } catch {}
+  return [];
+};
+
+const ensurePortFree = async (name, port) => {
+  const inUse = await testConnection('127.0.0.1', port, 500);
+  if (!inUse) return;
+
+  console.log(`\n${name} port ${port} is already in use.`);
+  if (!isInteractive) {
+    console.log(`Stop the existing process or change ${name.toUpperCase()}_PORT, then rerun ./start.`);
+    await rl.close();
+    process.exit(1);
+  }
+
+  const wantsKill = await yesNo('Terminate the existing process on that port now?', true);
+  if (!wantsKill) {
+    console.log(`Stop the existing process or change ${name.toUpperCase()}_PORT, then rerun ./start.`);
+    await rl.close();
+    process.exit(1);
+  }
+
+  const pids = await getPidsForPort(port);
+  if (!pids.length) {
+    console.log('Could not identify the process. Stop it manually and rerun ./start.');
+    await rl.close();
+    process.exit(1);
+  }
+
+  await runCommand('kill', ['-TERM', ...pids]);
+  await wait(500);
+  const stillInUse = await testConnection('127.0.0.1', port, 500);
+  if (stillInUse) {
+    await runCommand('kill', ['-KILL', ...pids]);
+  }
+};
+
 const ensureEnv = async () => {
   if (!existsSync(envPath)) {
     const wantsSetup = await yesNo('No .env found. Run ./setup now?', isInteractive);
@@ -273,6 +326,11 @@ const resetPostgresCredentials = async (env) => {
     process.exit(1);
   }
 
+  const apiPort = Number(env.API_PORT ?? '3333');
+  const webPort = Number(env.WEB_PORT ?? env.PORT ?? '3000');
+  await ensurePortFree('API', apiPort);
+  await ensurePortFree('WEB', webPort);
+
   const pgAuth = await checkPostgresAuth(env);
   if (!pgAuth.ok) {
     if (pgAuth.reason === 'pg-missing') {
@@ -338,7 +396,7 @@ const resetPostgresCredentials = async (env) => {
   }
 
   console.log('\nStarting the dev stack (API + ingestion + WebGUI)...');
-  await runCommand('pnpm', ['dev']);
+  await runCommand('pnpm', ['dev'], { env: { ...process.env, PORT: String(webPort) } });
 
   await rl.close();
 })().catch((err) => {

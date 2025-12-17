@@ -14,9 +14,13 @@
   "dependencies": {
     "@airapiserv/core": "workspace:*",
     "@airapiserv/storage": "workspace:*",
+    "eventemitter3": "^5.0.1",
     "pino": "^9.1.0",
     "ws": "^8.17.0",
     "zod": "^3.22.4",
     "undici": "^6.11.1"
+  },
+  "devDependencies": {
+    "@types/ws": "^8.5.10"
   }
 }

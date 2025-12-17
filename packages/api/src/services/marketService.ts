@@ -42,7 +42,18 @@ export class MarketService {
     const normalizedMarketId = this.normalizeMarketId(marketId);
     const data = await this.redis.hgetall(`ticker:${normalizedMarketId}`);
     if (!Object.keys(data).length) {
-      return null;
+      const lastTrade = await this.redis.hgetall(`trade:${normalizedMarketId}`);
+      if (!Object.keys(lastTrade).length) {
+        return null;
+      }
+      return {
+        marketId: normalizedMarketId,
+        last: Number(lastTrade.price ?? 0),
+        mark: undefined,
+        bestBid: undefined,
+        bestAsk: undefined,
+        updatedAt: Number(lastTrade.ts ?? Date.now()),
+      };
     }
     return {
       marketId: normalizedMarketId,

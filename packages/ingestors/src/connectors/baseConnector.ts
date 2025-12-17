@@ -1,10 +1,11 @@
-import EventEmitter from 'eventemitter3';
+import { EventEmitter } from 'eventemitter3';
 import pino from 'pino';
 import { MarketEvent } from '@airapiserv/core';
 
-export interface MarketConnector extends EventEmitter {
+export interface MarketConnector {
   start(): Promise<void>;
   stop(): Promise<void>;
+  on(event: 'event', listener: (event: MarketEvent) => void): this;
 }
 
 export abstract class BaseConnector extends EventEmitter implements MarketConnector {
