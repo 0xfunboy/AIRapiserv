@@ -26,7 +26,7 @@ export default async function ComparePage() {
     <section className="space-y-6">
       <div>
         <h2 className="text-2xl font-semibold">Compare</h2>
-        <p className="text-sm text-slate-400">Divergenza prezzi multi provider</p>
+        <p className="text-sm text-slate-400">Price divergence across providers</p>
       </div>
       <table className="w-full border border-slate-800 rounded-xl overflow-hidden text-sm">
         <thead className="bg-slate-900 text-left">

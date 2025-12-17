@@ -1,3 +1,4 @@
+import type { RawData } from 'ws';
 import { FastifyInstance } from 'fastify';
 import { MarketService } from '../services/marketService.js';
 
@@ -11,10 +12,10 @@ interface Subscription {
 }
 
 export function registerWsGateway(fastify: FastifyInstance, marketService: MarketService) {
-  fastify.get('/v1/ws', { websocket: true }, (connection) => {
+  fastify.get('/v1/ws', { websocket: true }, (socket) => {
     const subscriptions: Subscription[] = [];
 
-    connection.socket.on('message', async (raw) => {
+    socket.on('message', async (raw: RawData) => {
       try {
         const msg = JSON.parse(raw.toString());
         if (msg.type === 'subscribe') {
@@ -24,7 +25,7 @@ export function registerWsGateway(fastify: FastifyInstance, marketService: Marke
             intervalMs: msg.intervalMs ?? 1000,
             timer: setInterval(async () => {
               const payload = await fetchPayload(msg.channel, msg.marketId, marketService, msg.interval ?? '1s');
-              connection.socket.send(
+              socket.send(
                 JSON.stringify({
                   type: 'update',
                   channel: msg.channel,
@@ -37,11 +38,11 @@ export function registerWsGateway(fastify: FastifyInstance, marketService: Marke
           subscriptions.push(subscription);
         }
       } catch (err) {
-        connection.socket.send(JSON.stringify({ type: 'error', message: (err as Error).message }));
+        socket.send(JSON.stringify({ type: 'error', message: (err as Error).message }));
       }
     });
 
-    connection.socket.on('close', () => {
+    socket.on('close', () => {
       subscriptions.forEach((subscription) => clearInterval(subscription.timer));
     });
   });

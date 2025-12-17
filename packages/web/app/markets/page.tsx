@@ -18,10 +18,12 @@ export default async function MarketsPage() {
     <section className="space-y-6">
       <div>
         <h2 className="text-2xl font-semibold">Markets</h2>
-        <p className="text-sm text-slate-400">Provider coverage e priorità</p>
+        <p className="text-sm text-slate-400">Provider coverage and priority</p>
       </div>
       <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 space-y-3">
-        <p className="text-sm text-slate-400">Placeholder view per mappare i mercati disponibili e la policy di routing. Ogni riga mostra il provider in ordine di preferenza.</p>
+        <p className="text-sm text-slate-400">
+          Placeholder view to map available markets and routing policies. Each row shows providers in order of preference.
+        </p>
         <ul className="space-y-2 text-sm">
           {providers.map((item: any) => (
             <li key={item.provider} className="flex items-center justify-between border border-slate-800 rounded-lg px-4 py-2">

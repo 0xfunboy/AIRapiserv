@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+if ! command -v pnpm >/dev/null 2>&1; then
+  echo "pnpm is not installed or not in PATH. Install pnpm and retry." >&2
+  exit 1
+fi
+
+pnpm project:setup

@@ -2,7 +2,7 @@
 import { createInterface } from 'node:readline/promises';
 import { stdin as input, stdout as output } from 'node:process';
 import { randomBytes } from 'node:crypto';
-import { existsSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import net from 'node:net';
 import { spawn, spawnSync } from 'node:child_process';
@@ -10,6 +10,7 @@ import { promisify } from 'node:util';
 
 const rl = createInterface({ input, output });
 const wait = promisify(setTimeout);
+const envPath = path.resolve('.env');
 
 const yesNo = async (question, defaultValue = true) => {
   const suffix = defaultValue ? '[Y/n]' : '[y/N]';
@@ -20,11 +21,29 @@ const yesNo = async (question, defaultValue = true) => {
 
 const ask = async (question, defaultValue, tip) => {
   if (tip) {
-    console.log(`› ${tip}`);
+    console.log(`> ${tip}`);
   }
   const suffix = defaultValue !== undefined && defaultValue !== null ? ` (default: ${defaultValue})` : '';
   const value = (await rl.question(`${question}${suffix}: `)).trim();
   return value || (defaultValue ?? '');
+};
+
+const parseEnv = (filePath) => {
+  const data = readFileSync(filePath, 'utf8');
+  const env = {};
+  for (const line of data.split('\n')) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith('#')) continue;
+    const idx = trimmed.indexOf('=');
+    if (idx === -1) continue;
+    const key = trimmed.slice(0, idx).trim();
+    let value = trimmed.slice(idx + 1).trim();
+    if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
+      value = value.slice(1, -1);
+    }
+    env[key] = value;
+  }
+  return env;
 };
 
 const buildRedisUrl = (host, port, db, password) => {
@@ -57,8 +76,6 @@ const testConnection = (host, port, timeoutMs = 3000) =>
 
 const escapeSql = (value) => value.replace(/'/g, "''");
 
-const envPath = path.resolve('.env');
-
 const ensureAptAvailability = () => {
   if (process.platform !== 'linux') return false;
   const result = spawnSync('apt-get', ['--version'], { stdio: 'ignore' });
@@ -68,66 +85,124 @@ const ensureAptAvailability = () => {
 const provisionServices = async (config) => {
   const aptAvailable = ensureAptAvailability();
   if (!aptAvailable) {
-    console.log('\n⚠️  Automatic install is only available on Debian/Ubuntu with apt-get. Please install Redis/ClickHouse/Postgres manually.');
+    console.log('\nWARNING: Automatic install is only available on Debian/Ubuntu with apt-get. Please install Redis/ClickHouse/Postgres manually.');
     return;
   }
 
-  console.log('\n🔧 Installing Redis / ClickHouse / Postgres (sudo permissions required)...');
+  try {
+  console.log('\nInstalling Redis / Postgres (sudo permissions required)...');
   await runCommand('sudo', ['apt-get', 'update']);
-  await runCommand('sudo', ['apt-get', 'install', '-y', 'redis-server', 'clickhouse-server', 'postgresql']);
+  await runCommand('sudo', ['apt-get', 'install', '-y', 'redis-server', 'postgresql']);
 
-  console.log('\n▶️  Enabling and starting the services...');
+  console.log('\nInstalling ClickHouse repository + packages...');
+  await runCommand('sudo', ['apt-get', 'install', '-y', 'apt-transport-https', 'ca-certificates', 'curl', 'gnupg']);
+  await runCommand('sudo', ['mkdir', '-p', '/usr/share/keyrings']);
+  await runCommand('bash', ['-lc', 'sudo gpg --keyserver keyserver.ubuntu.com --recv-keys 3E4AD4719DDE9A38']);
+  await runCommand('bash', ['-lc', 'sudo gpg --export 3E4AD4719DDE9A38 | sudo gpg --dearmor -o /usr/share/keyrings/clickhouse.gpg']);
+  await runCommand('bash', [
+    '-lc',
+    'echo \"deb [signed-by=/usr/share/keyrings/clickhouse.gpg] https://packages.clickhouse.com/deb stable main\" | sudo tee /etc/apt/sources.list.d/clickhouse.list',
+  ]);
+  await runCommand('sudo', ['apt-get', 'update']);
+  await runCommand('sudo', ['apt-get', 'install', '-y', 'clickhouse-server', 'clickhouse-client']);
+
+  console.log('\nEnabling and starting the services...');
   await runCommand('sudo', ['systemctl', 'enable', '--now', 'redis-server']);
-  await runCommand('sudo', ['systemctl', 'enable', '--now', 'clickhouse-server']);
   await runCommand('sudo', ['systemctl', 'enable', '--now', 'postgresql']);
+  await runCommand('sudo', ['systemctl', 'enable', '--now', 'clickhouse-server']);
 
-  console.log('\n🗄  Configuring Postgres with the provided credentials...');
-  const sqlUser = `DO $$ BEGIN
-    IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = '${escapeSql(config.pgUser)}') THEN
-      CREATE ROLE ${config.pgUser} LOGIN PASSWORD '${escapeSql(config.pgPassword)}';
-    ELSE
-      ALTER USER ${config.pgUser} WITH PASSWORD '${escapeSql(config.pgPassword)}';
-    END IF;
-  END $$;`;
-  await runCommand('sudo', ['-u', 'postgres', 'psql', '-v', 'ON_ERROR_STOP=1', '-c', sqlUser]);
+  console.log('\nConfiguring Postgres with the provided credentials...');
+    const sqlUser = `DO $$ BEGIN
+      IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = '${escapeSql(config.pgUser)}') THEN
+        CREATE ROLE ${config.pgUser} LOGIN PASSWORD '${escapeSql(config.pgPassword)}';
+      ELSE
+        ALTER USER ${config.pgUser} WITH PASSWORD '${escapeSql(config.pgPassword)}';
+      END IF;
+    END $$;`;
+    await runCommand('sudo', ['-u', 'postgres', 'psql', '-v', 'ON_ERROR_STOP=1', '-c', sqlUser]);
 
-  const sqlDb = `DO $$ BEGIN
-    IF NOT EXISTS (SELECT FROM pg_database WHERE datname = '${escapeSql(config.pgDatabase)}') THEN
-      CREATE DATABASE ${config.pgDatabase} OWNER ${config.pgUser};
-    END IF;
-  END $$;`;
-  await runCommand('sudo', ['-u', 'postgres', 'psql', '-v', 'ON_ERROR_STOP=1', '-c', sqlDb]);
-  await runCommand('sudo', ['-u', 'postgres', 'psql', '-v', 'ON_ERROR_STOP=1', '-c', `GRANT ALL PRIVILEGES ON DATABASE ${config.pgDatabase} TO ${config.pgUser};`]);
+    const sqlDb = `DO $$ BEGIN
+      IF NOT EXISTS (SELECT FROM pg_database WHERE datname = '${escapeSql(config.pgDatabase)}') THEN
+        CREATE DATABASE ${config.pgDatabase} OWNER ${config.pgUser};
+      END IF;
+    END $$;`;
+    await runCommand('sudo', ['-u', 'postgres', 'psql', '-v', 'ON_ERROR_STOP=1', '-c', sqlDb]);
+    await runCommand('sudo', ['-u', 'postgres', 'psql', '-v', 'ON_ERROR_STOP=1', '-c', `GRANT ALL PRIVILEGES ON DATABASE ${config.pgDatabase} TO ${config.pgUser};`]);
 
-  console.log('\nℹ️  Redis and ClickHouse use their default configs. Set passwords later in /etc/redis/redis.conf and /etc/clickhouse-server/users.d/default.xml if needed.');
+    console.log('\nRedis and ClickHouse are installed with default configs. Set passwords later in /etc/redis/redis.conf and /etc/clickhouse-server/users.d/default.xml if needed.');
+  } catch (err) {
+    console.error('\nAutomatic install failed:', err?.message ?? err);
+    console.log('Manual fallback:');
+    console.log('- sudo apt-get update');
+    console.log('- sudo apt-get install -y redis-server postgresql');
+    console.log('- sudo apt-get install -y apt-transport-https ca-certificates curl gnupg');
+    console.log('- sudo gpg --keyserver keyserver.ubuntu.com --recv-keys 3E4AD4719DDE9A38');
+    console.log('- sudo gpg --export 3E4AD4719DDE9A38 | sudo gpg --dearmor -o /usr/share/keyrings/clickhouse.gpg');
+    console.log('- echo \"deb [signed-by=/usr/share/keyrings/clickhouse.gpg] https://packages.clickhouse.com/deb stable main\" | sudo tee /etc/apt/sources.list.d/clickhouse.list');
+    console.log('- sudo apt-get update');
+    console.log('- sudo apt-get install -y clickhouse-server clickhouse-client');
+    console.log('- sudo systemctl enable --now redis-server postgresql clickhouse-server');
+  }
 };
 
 const verifyServices = async (services) => {
-  console.log('\n🔍 Checking service reachability...');
+  console.log('\nChecking service reachability...');
   for (const svc of services) {
     const reachable = await testConnection(svc.host, Number(svc.port));
     if (reachable) {
-      console.log(`✅ ${svc.name} reachable at ${svc.host}:${svc.port}`);
+      console.log(`[OK] ${svc.name} reachable at ${svc.host}:${svc.port}`);
     } else {
-      console.log(`❌ ${svc.name} is not responding at ${svc.host}:${svc.port}`);
-      console.log(`   Tip: ${svc.tip}`);
+      console.log(`[FAIL] ${svc.name} is not responding at ${svc.host}:${svc.port}`);
+      console.log(`       Tip: ${svc.tip}`);
     }
     await wait(100);
   }
 };
 
+const defaults = {
+  nodeEnv: 'development',
+  apiPort: '3333',
+  webPort: '4000',
+  redisHost: '127.0.0.1',
+  redisPort: '6379',
+  redisDb: '0',
+  redisPassword: '',
+  clickHost: 'http://127.0.0.1:8123',
+  clickUser: 'default',
+  clickPassword: '',
+  pgHost: '127.0.0.1',
+  pgPort: '5432',
+  pgUser: 'airapiserv',
+  pgPassword: 'airapiserv',
+  pgDatabase: 'airapiserv',
+  ingestionConcurrency: '4',
+  rollingCandles: true,
+  jwtSecret: randomBytes(24).toString('hex'),
+  corsOrigins: 'http://localhost:4000',
+  apiRateLimit: '200',
+  coingeckoKey: '',
+  coinmarketcapKey: '',
+  cryptocompareKey: '',
+  enableCg: true,
+  enableCc: true,
+  fallbackPoll: '300000',
+};
+
 (async () => {
-  console.log('╔══════════════════════════════════════╗');
-  console.log('║  AIRapiserv setup wizard (CLI)       ║');
-  console.log('╚══════════════════════════════════════╝\n');
+  console.log('========================================');
+  console.log(' AIRapiserv setup wizard (CLI)');
+  console.log('========================================\n');
   console.log('Answer a few questions to generate `.env` and optionally install Redis/ClickHouse/Postgres.');
 
   const envExists = existsSync(envPath);
+  const existingEnv = envExists ? parseEnv(envPath) : {};
+  let writeEnv = true;
+
   if (envExists) {
     const overwrite = await yesNo('\nA .env file already exists. Do you want to overwrite it?', false);
     if (!overwrite) {
-      console.log('Setup aborted, existing .env preserved.');
-      process.exit(0);
+      writeEnv = false;
+      console.log('Keeping the existing .env. Using it for provisioning and checks.');
     }
   }
 
@@ -135,123 +210,180 @@ const verifyServices = async (services) => {
   if (process.platform === 'linux') {
     autoInstall = await yesNo('\nDo you want the wizard to install/start Redis, ClickHouse and Postgres locally? (sudo + apt-get required)', true);
   } else {
-    console.log('\nℹ️  Automatic install is not available on this OS. Follow the manual instructions printed below.');
+    console.log('\nINFO: Automatic install is not available on this OS. Follow the manual instructions printed below.');
   }
 
-  const nodeEnv = await ask('\nNODE_ENV', 'development', 'Use "production" for deployed environments');
-  const apiPort = await ask('API port', '3333', 'Fastify REST/WS listener');
-  const webPort = await ask('WebGUI port', '4000', 'Next.js dev server');
+  let config;
+  if (writeEnv) {
+    const nodeEnv = await ask('\nNODE_ENV', defaults.nodeEnv, 'Use "production" for deployed environments');
+    const apiPort = await ask('API port', defaults.apiPort, 'Fastify REST/WS listener');
+    const webPort = await ask('WebGUI port', defaults.webPort, 'Next.js dev server');
 
-  console.log('\n--- Redis (realtime cache) ---');
-  const redisHost = await ask('Redis host', '127.0.0.1');
-  const redisPort = await ask('Redis port', '6379');
-  const redisDb = await ask('Redis DB index', '0');
-  const redisPassword = await ask('Redis password (leave empty if none)', '');
-  const redisUrl = buildRedisUrl(redisHost, redisPort, redisDb, redisPassword);
+    console.log('\n--- Redis (realtime cache) ---');
+    const redisHost = await ask('Redis host', defaults.redisHost);
+    const redisPort = await ask('Redis port', defaults.redisPort);
+    const redisDb = await ask('Redis DB index', defaults.redisDb);
+    const redisPassword = await ask('Redis password (leave empty if none)', defaults.redisPassword);
+    const redisUrl = buildRedisUrl(redisHost, redisPort, redisDb, redisPassword);
 
-  console.log('\n--- ClickHouse (time series) ---');
-  const clickHost = await ask('ClickHouse URL', 'http://127.0.0.1:8123', 'Format http(s)://host:port');
-  const clickUser = await ask('ClickHouse username', 'default');
-  const clickPassword = await ask('ClickHouse password (leave empty if none)', '');
-  let clickHouseUrlForCheck;
-  try {
-    clickHouseUrlForCheck = new URL(clickHost.includes('://') ? clickHost : `http://${clickHost}`);
-  } catch {
-    clickHouseUrlForCheck = new URL('http://127.0.0.1:8123');
-  }
+    console.log('\n--- ClickHouse (time series) ---');
+    const clickHost = await ask('ClickHouse URL', defaults.clickHost, 'Format http(s)://host:port');
+    const clickUser = await ask('ClickHouse username', defaults.clickUser);
+    const clickPassword = await ask('ClickHouse password (leave empty if none)', defaults.clickPassword);
 
-  console.log('\n--- Postgres (catalogue) ---');
-  const pgHost = await ask('Postgres host', '127.0.0.1');
-  const pgPort = await ask('Postgres port', '5432');
-  const pgUser = await ask('Postgres user', 'airapiserv');
-  const pgPassword = await ask('Postgres password', 'airapiserv');
-  const pgDatabase = await ask('Postgres database', 'airapiserv');
+    console.log('\n--- Postgres (catalogue) ---');
+    const pgHost = await ask('Postgres host', defaults.pgHost);
+    const pgPort = await ask('Postgres port', defaults.pgPort);
+    const pgUser = await ask('Postgres user', defaults.pgUser);
+    const pgPassword = await ask('Postgres password', defaults.pgPassword);
+    const pgDatabase = await ask('Postgres database', defaults.pgDatabase);
 
-  const ingestionConcurrency = await ask('\nIngestion worker concurrency', '4');
-  const rollingCandles = await yesNo('Enable rolling candles?', true);
+    const ingestionConcurrency = await ask('\nIngestion worker concurrency', defaults.ingestionConcurrency);
+    const rollingCandles = await yesNo('Enable rolling candles?', true);
 
-  console.log('\n--- Security & API ---');
-  const jwtSecret = await ask('JWT secret', randomBytes(24).toString('hex'), 'Used for API + WebGUI sessions');
-  const corsOrigins = await ask('CORS origins (comma separated)', 'http://localhost:4000');
-  const apiRateLimit = await ask('API rate limit (req/min)', '200');
+    console.log('\n--- Security & API ---');
+    const jwtSecret = await ask('JWT secret', defaults.jwtSecret, 'Used for API + WebGUI sessions');
+    const corsOrigins = await ask('CORS origins (comma separated)', defaults.corsOrigins);
+    const apiRateLimit = await ask('API rate limit (req/min)', defaults.apiRateLimit);
 
-  console.log('\n--- Provider keys (optional) ---');
-  const coingeckoKey = await ask('CoinGecko API key', '');
-  const coinmarketcapKey = await ask('CoinMarketCap API key', '');
-  const cryptocompareKey = await ask('CryptoCompare API key', '');
+    console.log('\n--- Provider keys (optional) ---');
+    const coingeckoKey = await ask('CoinGecko API key', defaults.coingeckoKey);
+    const coinmarketcapKey = await ask('CoinMarketCap API key', defaults.coinmarketcapKey);
+    const cryptocompareKey = await ask('CryptoCompare API key', defaults.cryptocompareKey);
 
-  const enableCg = await yesNo('Enable CoinGecko fallback?', true);
-  const enableCc = await yesNo('Enable CryptoCompare fallback?', true);
-  const fallbackPoll = await ask('Fallback poll interval (ms)', '300000', '≥ 300000 (5 minutes) recommended');
+    const enableCg = await yesNo('Enable CoinGecko fallback?', true);
+    const enableCc = await yesNo('Enable CryptoCompare fallback?', true);
+    const fallbackPoll = await ask('Fallback poll interval (ms)', defaults.fallbackPoll, '>= 300000 (5 minutes) recommended');
 
-  const content = `NODE_ENV=${nodeEnv}
+    config = {
+      nodeEnv,
+      apiPort,
+      webPort,
+      redisHost,
+      redisPort,
+      redisDb,
+      redisPassword,
+      redisUrl,
+      clickHost,
+      clickUser,
+      clickPassword,
+      pgHost,
+      pgPort,
+      pgUser,
+      pgPassword,
+      pgDatabase,
+      ingestionConcurrency,
+      rollingCandles,
+      jwtSecret,
+      corsOrigins,
+      apiRateLimit,
+      coingeckoKey,
+      coinmarketcapKey,
+      cryptocompareKey,
+      enableCg,
+      enableCc,
+      fallbackPoll,
+    };
+
+    const content = `NODE_ENV=${config.nodeEnv}
 LOG_LEVEL=info
 PORT=3000
-WEB_PORT=${webPort}
-API_PORT=${apiPort}
-INGESTION_WORKER_CONCURRENCY=${ingestionConcurrency}
-ENABLE_ROLLING_CANDLES=${rollingCandles}
+WEB_PORT=${config.webPort}
+API_PORT=${config.apiPort}
+INGESTION_WORKER_CONCURRENCY=${config.ingestionConcurrency}
+ENABLE_ROLLING_CANDLES=${config.rollingCandles}
 
-REDIS_URL=${redisUrl}
+REDIS_URL=${config.redisUrl}
 
-CLICKHOUSE_URL=${clickHost}
-CLICKHOUSE_USERNAME=${clickUser}
-CLICKHOUSE_PASSWORD=${clickPassword}
+CLICKHOUSE_URL=${config.clickHost}
+CLICKHOUSE_USERNAME=${config.clickUser}
+CLICKHOUSE_PASSWORD=${config.clickPassword}
 
-PG_HOST=${pgHost}
-PG_PORT=${pgPort}
-PG_USER=${pgUser}
-PG_PASSWORD=${pgPassword}
-PG_DATABASE=${pgDatabase}
+PG_HOST=${config.pgHost}
+PG_PORT=${config.pgPort}
+PG_USER=${config.pgUser}
+PG_PASSWORD=${config.pgPassword}
+PG_DATABASE=${config.pgDatabase}
 
-JWT_SECRET=${jwtSecret}
-API_RATE_LIMIT=${apiRateLimit}
-CORS_ORIGINS=${corsOrigins}
+JWT_SECRET=${config.jwtSecret}
+API_RATE_LIMIT=${config.apiRateLimit}
+CORS_ORIGINS=${config.corsOrigins}
 
-COINGECKO_API_KEY=${coingeckoKey}
-COINMARKETCAP_API_KEY=${coinmarketcapKey}
-CRYPTOCOMPARE_API_KEY=${cryptocompareKey}
+COINGECKO_API_KEY=${config.coingeckoKey}
+COINMARKETCAP_API_KEY=${config.coinmarketcapKey}
+CRYPTOCOMPARE_API_KEY=${config.cryptocompareKey}
 DEXSCREENER_BASE_URL=https://api.dexscreener.io
 DEFILLAMA_BASE_URL=https://coins.llama.fi
 BINANCE_WS_URL=wss://stream.binance.com:9443/ws
 BYBIT_WS_URL=wss://stream.bybit.com/v5/public/spot
 
-ENABLE_COINGECKO_FALLBACK=${enableCg}
-ENABLE_CRYPTOCOMPARE_FALLBACK=${enableCc}
+ENABLE_COINGECKO_FALLBACK=${config.enableCg}
+ENABLE_CRYPTOCOMPARE_FALLBACK=${config.enableCc}
 MAX_FALLBACK_CALLS_PER_MINUTE=2
-FALLBACK_POLL_INTERVAL_MS=${fallbackPoll}
+FALLBACK_POLL_INTERVAL_MS=${config.fallbackPoll}
 
-NEXT_PUBLIC_API_BASE=http://localhost:${apiPort}
-NEXT_PUBLIC_WS_URL=ws://localhost:${apiPort}/v1/ws
+NEXT_PUBLIC_API_BASE=http://localhost:${config.apiPort}
+NEXT_PUBLIC_WS_URL=ws://localhost:${config.apiPort}/v1/ws
 `;
 
-  writeFileSync(envPath, content.trim() + '\n');
-
-  if (autoInstall) {
-    await provisionServices({ pgUser, pgPassword, pgDatabase });
+    writeFileSync(envPath, content.trim() + '\n');
   } else {
-    console.log('\nℹ️  Automatic install skipped. Make sure Redis/ClickHouse/Postgres are running with the values entered above.');
+    const redisUrl = existingEnv.REDIS_URL ?? buildRedisUrl(defaults.redisHost, defaults.redisPort, defaults.redisDb, defaults.redisPassword);
+    config = {
+      nodeEnv: existingEnv.NODE_ENV ?? defaults.nodeEnv,
+      apiPort: existingEnv.API_PORT ?? defaults.apiPort,
+      webPort: existingEnv.WEB_PORT ?? defaults.webPort,
+      redisUrl,
+      clickHost: existingEnv.CLICKHOUSE_URL ?? defaults.clickHost,
+      clickUser: existingEnv.CLICKHOUSE_USERNAME ?? defaults.clickUser,
+      clickPassword: existingEnv.CLICKHOUSE_PASSWORD ?? defaults.clickPassword,
+      pgHost: existingEnv.PG_HOST ?? defaults.pgHost,
+      pgPort: existingEnv.PG_PORT ?? defaults.pgPort,
+      pgUser: existingEnv.PG_USER ?? defaults.pgUser,
+      pgPassword: existingEnv.PG_PASSWORD ?? defaults.pgPassword,
+      pgDatabase: existingEnv.PG_DATABASE ?? defaults.pgDatabase,
+    };
   }
 
+  if (autoInstall) {
+    await provisionServices({ pgUser: config.pgUser, pgPassword: config.pgPassword, pgDatabase: config.pgDatabase });
+  } else {
+    console.log('\nINFO: Automatic install skipped. Make sure Redis/ClickHouse/Postgres are running with the values in .env.');
+  }
+
+  let clickHouseUrlForCheck;
+  try {
+    clickHouseUrlForCheck = new URL(config.clickHost.includes('://') ? config.clickHost : `http://${config.clickHost}`);
+  } catch {
+    clickHouseUrlForCheck = new URL('http://127.0.0.1:8123');
+  }
+
+  let redisHost = defaults.redisHost;
+  let redisPort = defaults.redisPort;
+  try {
+    const url = new URL(config.redisUrl.includes('://') ? config.redisUrl : `redis://${config.redisUrl}`);
+    redisHost = url.hostname;
+    redisPort = url.port || defaults.redisPort;
+  } catch {}
+
   await verifyServices([
-    { name: 'Redis', host: redisHost, port: redisPort, tip: 'Install redis-server or check firewall/host configuration.' },
+    { name: 'Redis', host: redisHost, port: redisPort, tip: 'Install redis-server or update REDIS_URL.' },
     {
       name: 'ClickHouse',
       host: clickHouseUrlForCheck.hostname,
       port: clickHouseUrlForCheck.port || (clickHouseUrlForCheck.protocol === 'https:' ? '8443' : '8123'),
       tip: 'Install clickhouse-server or update CLICKHOUSE_URL.',
     },
-    { name: 'Postgres', host: pgHost, port: pgPort, tip: 'Install postgresql or double-check credentials/host.' },
+    { name: 'Postgres', host: config.pgHost, port: config.pgPort, tip: 'Install postgresql or update PG_HOST/PG_PORT.' },
   ]);
 
   await rl.close();
 
-  console.log('\n✅ .env generated successfully.');
+  console.log('\nSetup completed.');
   console.log('\nNext steps:');
-  console.log('- Run `pnpm db:migrate` to create the storage tables.');
-  console.log('- Start the stack via `pnpm dev` (or `pnpm run` if you like the reminder).');
-  console.log(`- API health: http://localhost:${apiPort}/v1/health`);
-  console.log(`- WebGUI: http://localhost:${webPort}`);
+  console.log('- Run `./start` to validate databases, run migrations, and launch the dev stack.');
+  console.log(`- API health: http://localhost:${config.apiPort}/v1/health`);
+  console.log(`- WebGUI: http://localhost:${config.webPort}`);
   console.log('\nTip: back up these credentials in your secret manager before deploying to production.');
 })().catch((err) => {
   console.error('Setup aborted:', err);

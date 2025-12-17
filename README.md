@@ -4,25 +4,24 @@ AIRapiserv is the market-data gateway consumed by AIRTrack. It exposes a stable 
 
 ## Quick start
 
-1. Provision Redis (6379), ClickHouse (8123) and Postgres (5432) locally or on managed services. If they are not installed on the host, the wizard can install and start them for you (apt-get + systemd).
-2. Run the interactive setup wizard to create `.env`, collect credentials and optionally install/start the services:
+The fastest path is a single command:
 
-   ```bash
-   pnpm project:setup
-   ```
+```bash
+./start
+```
 
-3. Install dependencies and launch the dev stack:
+`./start` will:
+- prompt you to run the installer if `.env` is missing,
+- install dependencies if needed,
+- verify Redis/ClickHouse/Postgres connectivity,
+- run migrations,
+- launch the dev stack (API + ingestors + WebGUI).
 
-   ```bash
-   pnpm install
-   pnpm dev
-   ```
+If you prefer to run the installer directly:
 
-`pnpm db:up` simply reminds you to start the external databases (the wizard can do it automatically). `pnpm run` still chains `db:up` + `dev` so that a single command can bootstrap the environment. It starts:
-
-- ingestion workers (`packages/ingestors`)
-- REST + WebSocket API (`packages/api`)
-- WebGUI (`packages/web`)
+```bash
+./setup
+```
 
 ## Monorepo structure
 
@@ -48,7 +47,9 @@ Additional documentation lives in `docs/`:
 
 | Script | Description |
 | --- | --- |
-| `pnpm project:setup` | Text wizard that generates `.env`, captures credentials, optionally installs the databases and verifies connectivity |
+| `./setup` | Interactive wizard that generates `.env`, captures credentials, optionally installs the databases and verifies connectivity |
+| `./start` | One-command bootstrap: verifies DBs, runs migrations, starts the dev stack |
+| `pnpm project:setup` | Same wizard as `./setup` (kept for pnpm users) |
 | `pnpm dev` | Starts API, ingestors and WebGUI in development mode | 
 | `pnpm build` | Builds every package | 
 | `pnpm start` | Launches only the API (after `pnpm build`) |
@@ -76,7 +77,7 @@ Additional documentation lives in `docs/`:
 
 ### Setup wizard
 
-`pnpm project:setup` walks the user through the entire configuration:
+`./setup` (or `pnpm project:setup`) walks the user through the entire configuration:
 
 - asks for host/user/password for Redis/ClickHouse/Postgres;
 - proposes defaults and generates the `JWT_SECRET` automatically;
@@ -86,6 +87,32 @@ Additional documentation lives in `docs/`:
 - runs reachability checks and highlights actionable tips when a service is down.
 
 With these safeguards AIRapiserv can be handed to customers that have zero operational experience.
+
+### Manual database installation (Ubuntu/Debian)
+
+If you prefer to install the databases manually, use the keyserver-based ClickHouse repo setup below (the direct GPG URL may return 403):
+
+```bash
+sudo apt-get update
+sudo apt-get install -y redis-server postgresql
+sudo apt-get install -y apt-transport-https ca-certificates curl gnupg
+sudo mkdir -p /usr/share/keyrings
+sudo gpg --keyserver keyserver.ubuntu.com --recv-keys 3E4AD4719DDE9A38
+sudo gpg --export 3E4AD4719DDE9A38 | sudo gpg --dearmor -o /usr/share/keyrings/clickhouse.gpg
+echo "deb [signed-by=/usr/share/keyrings/clickhouse.gpg] https://packages.clickhouse.com/deb stable main" | \\
+  sudo tee /etc/apt/sources.list.d/clickhouse.list
+sudo apt-get update
+sudo apt-get install -y clickhouse-server clickhouse-client
+sudo systemctl enable --now redis-server postgresql clickhouse-server
+```
+
+Verify the services:
+
+```bash
+redis-cli ping
+curl -s http://127.0.0.1:8123/ping
+sudo -u postgres psql -c "select 1;"
+```
 
 ## Production checklist
 

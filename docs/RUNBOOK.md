@@ -2,11 +2,45 @@
 
 ## Local bootstrap
 
-1. Provision Redis (6379), ClickHouse (8123) and Postgres (5432). The wizard (`pnpm project:setup`) can install and start them automatically on Debian/Ubuntu hosts via apt-get/systemd.
-2. `pnpm project:setup` → interactive wizard that generates `.env`, configures ports/credentials, verifies connectivity and (optionally) installs the databases.
-3. `pnpm install`
-4. `pnpm run` (executes `db:up` + `dev`. `db:up` just reminds you to keep the databases running).
-5. Check http://localhost:3333/v1/health and http://localhost:4000.
+The simplest path is a single command:
+
+```bash
+./start
+```
+
+`./start` will guide you through missing prerequisites, verify database connectivity, run migrations, and launch the dev stack.
+
+If you want to run the installer directly:
+
+```bash
+./setup
+```
+
+## Manual database installation (Ubuntu/Debian)
+
+If the wizard is not used, install Redis/Postgres and ClickHouse manually with the keyserver method (the direct GPG URL may return 403):
+
+```bash
+sudo apt-get update
+sudo apt-get install -y redis-server postgresql
+sudo apt-get install -y apt-transport-https ca-certificates curl gnupg
+sudo mkdir -p /usr/share/keyrings
+sudo gpg --keyserver keyserver.ubuntu.com --recv-keys 3E4AD4719DDE9A38
+sudo gpg --export 3E4AD4719DDE9A38 | sudo gpg --dearmor -o /usr/share/keyrings/clickhouse.gpg
+echo "deb [signed-by=/usr/share/keyrings/clickhouse.gpg] https://packages.clickhouse.com/deb stable main" | \
+  sudo tee /etc/apt/sources.list.d/clickhouse.list
+sudo apt-get update
+sudo apt-get install -y clickhouse-server clickhouse-client
+sudo systemctl enable --now redis-server postgresql clickhouse-server
+```
+
+Verify:
+
+```bash
+redis-cli ping
+curl -s http://127.0.0.1:8123/ping
+sudo -u postgres psql -c "select 1;"
+```
 
 ## Services
 
@@ -15,7 +49,7 @@
 | Ingestors | - | `pnpm ingest:run` |
 | API REST/WS | 3333 | `pnpm --filter api dev` |
 | WebGUI | 3000/4000 | `pnpm --filter web dev` |
-| Redis | 6379 | External (bare metal / managed)
+| Redis | 6379 | External (bare metal / managed) |
 | ClickHouse | 8123/9000 | External |
 | Postgres | 5432 | External |
 

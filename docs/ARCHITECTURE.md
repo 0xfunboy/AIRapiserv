@@ -48,4 +48,4 @@ WebGUI   ─▶ Next.js fetch/WS ─▶ API gateway
 
 ## Run command
 
-Run `pnpm project:setup` first to generate `.env` and, optionally, install/start Redis/ClickHouse/Postgres on Debian/Ubuntu via apt-get/systemd. Afterwards `pnpm run` = `pnpm db:up && pnpm dev`. `db:up` simply reminds you to keep the databases running (compose file is optional). Once the DBs are ready, `pnpm dev` launches ingest workers, API and WebGUI in watch mode.
+Run `./setup` first to generate `.env` and, optionally, install/start Redis/ClickHouse/Postgres on Debian/Ubuntu via apt-get/systemd. Afterwards `./start` performs the end-to-end bootstrap: it validates the environment, checks database reachability, runs migrations, and launches the dev stack.

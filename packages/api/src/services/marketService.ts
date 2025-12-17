@@ -64,7 +64,7 @@ export class MarketService {
       const result = await this.clickHouse.query({
         query,
         format: 'JSONEachRow',
-        parameters: {
+        query_params: {
           marketId: params.marketId,
           intervalMs,
           limit: params.limit ?? 500,

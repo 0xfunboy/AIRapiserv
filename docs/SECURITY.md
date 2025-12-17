@@ -9,7 +9,7 @@
 ## Rate limiting
 
 - `@fastify/rate-limit` applies globally (`API_RATE_LIMIT`, default 200 req/min per IP).
-- Fallback providers (CoinGecko/CryptoCompare) enforce an additional poll interval (≥ 5 minutes) to respect quotas.
+- Fallback providers (CoinGecko/CryptoCompare) enforce an additional poll interval (>= 5 minutes) to respect quotas.
 
 ## Input validation
 
@@ -24,7 +24,7 @@
 
 ## Secrets
 
-- Local development uses `.env` (generated via `pnpm project:setup`).
+- Local development uses `.env` (generated via `./setup`).
 - Production should pull secrets from a dedicated manager (AWS SSM, Doppler, Vault, ...).
 
 ## Hardening backlog
