@@ -1,0 +1,11 @@
+node_modules
+.pnpm-store
+.env
+*.log
+.DS_Store
+dist
+packages/*/dist
+packages/**/node_modules
+.next
+coverage
+docker-data

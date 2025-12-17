@@ -1,0 +1,27 @@
+{
+  "name": "airapiserv",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@9.0.0",
+  "scripts": {
+    "dev": "pnpm -r --parallel --aggregate-output --filter @airapiserv/api --filter @airapiserv/ingestors --filter @airapiserv/web dev",
+    "build": "pnpm -r --parallel build",
+    "start": "pnpm --filter api start",
+    "run": "pnpm db:up && pnpm dev",
+    "db:up": "node scripts/manual-db.js",
+    "db:down": "node scripts/manual-db.js",
+    "db:migrate": "pnpm --filter storage migrate",
+    "ingest:run": "pnpm --filter ingestors start",
+    "web:dev": "pnpm --filter web dev",
+    "web:build": "pnpm --filter web build",
+    "lint": "pnpm -r lint",
+    "typecheck": "pnpm -r typecheck",
+    "project:setup": "node scripts/setup.mjs"
+  },
+  "devDependencies": {
+    "concurrently": "^9.0.0",
+    "tsx": "^4.7.1",
+    "typescript": "^5.4.5"
+  }
+}

@@ -1,0 +1,33 @@
+services:
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    command: redis-server --save "" --appendonly no
+  clickhouse:
+    image: clickhouse/clickhouse-server:24.3
+    restart: unless-stopped
+    environment:
+      - CLICKHOUSE_DB=airapiserv
+      - CLICKHOUSE_USER=default
+      - CLICKHOUSE_PASSWORD=
+    ports:
+      - "8123:8123"
+      - "9000:9000"
+    volumes:
+      - clickhouse-data:/var/lib/clickhouse
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      - POSTGRES_DB=airapiserv
+      - POSTGRES_USER=airapiserv
+      - POSTGRES_PASSWORD=airapiserv
+    ports:
+      - "5432:5432"
+    volumes:
+      - pg-data:/var/lib/postgresql/data
+volumes:
+  clickhouse-data:
+  pg-data:
