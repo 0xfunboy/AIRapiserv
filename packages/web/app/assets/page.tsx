@@ -14,8 +14,20 @@ async function fetchMarkets() {
   }
 }
 
+async function fetchTokens() {
+  try {
+    const res = await fetch(`${API_BASE}/v1/tokens?limit=120`, { cache: 'no-store' });
+    if (!res.ok) return [];
+    return res.json();
+  } catch (err) {
+    console.error(err);
+    return [];
+  }
+}
+
 export default async function AssetsPage() {
   const markets = await fetchMarkets();
+  const tokens = await fetchTokens();
   const symbols = Array.from(new Set(markets.map((market: any) => market.symbol))).slice(0, 30);
 
   return (
@@ -38,6 +50,24 @@ export default async function AssetsPage() {
       </div>
 
       <AssetSearch />
+
+      <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 space-y-4">
+        <h3 className="text-lg font-semibold">Token catalog (sample)</h3>
+        <p className="text-sm text-slate-400">Latest tokens aggregated from external sources.</p>
+        <div className="grid gap-3 md:grid-cols-2 text-sm">
+          {tokens.slice(0, 12).map((token: any) => (
+            <div key={token.tokenKey} className="border border-slate-800 rounded-lg p-3">
+              <p className="font-semibold">
+                {token.name ?? 'Unknown'} ({token.symbol ?? 'n/a'})
+              </p>
+              <p className="text-xs text-slate-400">Chain: {token.chain ?? 'n/a'}</p>
+              <p className="text-xs text-slate-400">CA: {token.contractAddress ?? 'n/a'}</p>
+              <p className="text-xs text-slate-500">Sources: {(token.sources ?? []).join(', ') || 'n/a'}</p>
+            </div>
+          ))}
+          {!tokens.length && <p className="text-sm text-slate-500">Token catalog is empty.</p>}
+        </div>
+      </div>
     </section>
   );
 }

@@ -127,6 +127,17 @@ async function migratePostgres() {
     payload jsonb not null,
     created_at timestamptz default now()
   );`);
+
+  await pool.query(`create table if not exists token_catalog (
+    token_key text primary key,
+    symbol text,
+    name text,
+    chain text,
+    contract_address text,
+    sources text[] default array[]::text[],
+    metadata jsonb default '{}'::jsonb,
+    updated_at timestamptz default now()
+  );`);
 }
 
 async function migrateClickHouse() {

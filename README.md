@@ -114,6 +114,7 @@ Additional documentation lives in `docs/`:
 - REST/WS API exposing the AIRTrack contract
 - WebGUI with dashboard, assets, markets, charts, compare and admin placeholders
 - Operational docs for AIRTrack compatibility
+- Token catalog aggregation (CoinGecko/CoinMarketCap/CryptoCompare/DexScreener) with 30m refresh + manual refresh button
 
 ### Setup wizard (local or external DBs)
 
@@ -127,6 +128,18 @@ Additional documentation lives in `docs/`:
 - runs reachability checks and highlights actionable tips when a service is down.
 
 With these safeguards AIRapiserv can be handed to customers that have zero operational experience.
+
+### Token catalog refresh
+
+The API process downloads a unified token list on boot and refreshes it every 30 minutes. You can force a refresh from the Status page or via:
+
+```bash
+curl -X POST http://localhost:3333/v1/tokens/refresh
+```
+
+Optional sources:
+- CoinGecko, CoinMarketCap, CryptoCompare, DexScreener (enabled automatically if keys are present).
+- DEXTools/Codex can be added by setting `DEXTOOLS_TOKEN_LIST_URL` / `CODEX_TOKEN_LIST_URL` in `.env`.
 
 ### Manual database installation (Ubuntu/Debian)
 

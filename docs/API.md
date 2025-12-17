@@ -13,6 +13,8 @@ All endpoints live under `/v1`. Public access uses JWT (`Authorization: Bearer <
 | `GET /v1/search` | `q` | Asset search |
 | `GET /v1/providers` | `marketType`, `requestType`, `supportsWs?` | Provider priority for each request type |
 | `GET /v1/markets` | `limit?` | Active markets detected in Redis |
+| `GET /v1/tokens` | `q?`, `limit?`, `offset?` | Token catalog search |
+| `POST /v1/tokens/refresh` | - | Force token catalog refresh |
 | `GET /v1/status` | - | Storage status + counts + active markets |
 | `GET /v1/health` | - | Health of Redis / ClickHouse / Postgres |
 

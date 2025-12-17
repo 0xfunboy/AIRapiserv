@@ -1,4 +1,5 @@
 import { StatCard } from '../../components/StatCard';
+import { TokenRefreshButton } from '../../components/TokenRefreshButton';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? 'http://localhost:3333';
 
@@ -24,6 +25,7 @@ export default async function StatusPage() {
   const clickhouse = status?.clickhouse ?? {};
   const postgres = status?.postgres ?? {};
   const activeMarkets = status?.activeMarkets ?? [];
+  const tokens = status?.tokens ?? {};
 
   return (
     <section className="space-y-8">
@@ -36,6 +38,21 @@ export default async function StatusPage() {
         <StatCard title="Redis" value={redis.status ?? 'unknown'} subtitle={`${redis.keysTotal ?? 0} keys`} />
         <StatCard title="ClickHouse" value={clickhouse.status ?? 'unknown'} subtitle={`${clickhouse.candlesRows ?? 0} candle rows`} />
         <StatCard title="Postgres" value={postgres.status ?? 'unknown'} subtitle={`${postgres.assets ?? 0} assets`} />
+      </div>
+
+      <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 space-y-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h3 className="text-lg font-semibold">Token catalog</h3>
+            <p className="text-xs text-slate-400">Aggregated token list (refresh every 30 minutes)</p>
+          </div>
+          <TokenRefreshButton />
+        </div>
+        <div className="grid gap-4 md:grid-cols-3">
+          <StatCard title="Tokens" value={`${tokens.count ?? 0}`} subtitle="Total token rows" />
+          <StatCard title="Last refresh" value={formatTs(tokens.lastRefreshAt ?? null)} subtitle="API scheduler" />
+          <StatCard title="Last update" value={formatTs(tokens.lastUpdatedAt ?? null)} subtitle="DB updated_at" />
+        </div>
       </div>
 
       <div className="grid gap-4 md:grid-cols-3">

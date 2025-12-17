@@ -6,7 +6,7 @@
   "packageManager": "pnpm@9.0.0",
   "scripts": {
     "dev": "pnpm --filter @airapiserv/core --filter @airapiserv/storage build && pnpm -r --parallel --aggregate-output --filter @airapiserv/api --filter @airapiserv/ingestors --filter @airapiserv/web dev",
-    "build": "pnpm -r --parallel build",
+    "build": "pnpm --filter @airapiserv/core --filter @airapiserv/storage build && pnpm -r --parallel --filter @airapiserv/api --filter @airapiserv/ingestors --filter @airapiserv/web build",
     "start": "pnpm --filter @airapiserv/core --filter @airapiserv/storage --filter @airapiserv/api build && pnpm --filter api start",
     "run": "pnpm db:up && pnpm dev",
     "db:up": "node scripts/manual-db.js",

@@ -1,9 +1,13 @@
 import { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { MarketService } from '../services/marketService.js';
+import { TokenCatalogService } from '../services/tokenCatalogService.js';
 
-export async function registerV1Routes(fastify: FastifyInstance, opts: { marketService: MarketService }) {
-  const { marketService } = opts;
+export async function registerV1Routes(
+  fastify: FastifyInstance,
+  opts: { marketService: MarketService; tokenCatalogService: TokenCatalogService }
+) {
+  const { marketService, tokenCatalogService } = opts;
 
   fastify.get('/resolve', async (request, reply) => {
     const schema = z.object({
@@ -77,8 +81,24 @@ export async function registerV1Routes(fastify: FastifyInstance, opts: { marketS
     };
   });
 
+  fastify.get('/tokens', async (request) => {
+    const schema = z.object({
+      q: z.string().optional(),
+      limit: z.coerce.number().min(1).max(500).optional(),
+      offset: z.coerce.number().min(0).optional(),
+    });
+    const query = schema.parse(request.query);
+    return tokenCatalogService.listTokens(query);
+  });
+
+  fastify.post('/tokens/refresh', async () => {
+    return tokenCatalogService.refreshTokens({ force: true });
+  });
+
   fastify.get('/status', async () => {
-    return marketService.getStatus();
+    const status = await marketService.getStatus();
+    const tokenStats = await tokenCatalogService.getStats();
+    return { ...status, tokens: tokenStats };
   });
 
   fastify.get('/health', async () => {
