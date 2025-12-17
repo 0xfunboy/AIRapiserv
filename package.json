@@ -17,7 +17,8 @@
     "web:build": "pnpm --filter web build",
     "lint": "pnpm -r lint",
     "typecheck": "pnpm -r typecheck",
-    "project:setup": "node scripts/setup.mjs"
+    "project:setup": "node scripts/setup.mjs",
+    "test:install-smoke": "node scripts/install-smoke.mjs"
   },
   "devDependencies": {
     "concurrently": "^9.0.0",

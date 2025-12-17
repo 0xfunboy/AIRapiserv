@@ -57,6 +57,7 @@ Additional documentation lives in `docs/`:
 | `pnpm db:migrate` | Runs the DDL in `packages/storage` |
 | `pnpm ingest:run` | Starts ingestion workers only |
 | `pnpm web:dev` | Starts the WebGUI only |
+| `pnpm test:install-smoke` | Non-interactive installer + migration + start smoke test |
 
 ## Stack
 
@@ -90,7 +91,11 @@ With these safeguards AIRapiserv can be handed to customers that have zero opera
 
 ### Manual database installation (Ubuntu/Debian)
 
-If you prefer to install the databases manually, use the keyserver-based ClickHouse repo setup below (the direct GPG URL may return 403):
+If you prefer to install the databases manually, use the keyserver-based ClickHouse repo setup below (the direct GPG URL may return 403). If you already added a broken ClickHouse key, remove it first:
+
+```bash
+sudo rm -f /etc/apt/sources.list.d/clickhouse.list /usr/share/keyrings/clickhouse.gpg
+```
 
 ```bash
 sudo apt-get update
@@ -104,6 +109,23 @@ echo "deb [signed-by=/usr/share/keyrings/clickhouse.gpg] https://packages.clickh
 sudo apt-get update
 sudo apt-get install -y clickhouse-server clickhouse-client
 sudo systemctl enable --now redis-server postgresql clickhouse-server
+```
+
+Set the ClickHouse password to match your `.env`:
+
+```bash
+sudo tee /etc/clickhouse-server/users.d/airapiserv-default.xml >/dev/null <<'EOF'
+<clickhouse>
+  <users>
+    <default>
+      <password>airapiserv</password>
+    </default>
+  </users>
+</clickhouse>
+EOF
+sudo rm -f /etc/clickhouse-server/users.d/default-password.xml
+sudo systemctl restart clickhouse-server
+curl -s 'http://127.0.0.1:8123/?query=SELECT%201' --user default:airapiserv
 ```
 
 Verify the services:

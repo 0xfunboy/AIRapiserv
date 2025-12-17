@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import 'dotenv/config';
 import { createInterface } from 'node:readline/promises';
 import { stdin as input, stdout as output } from 'node:process';
 import { existsSync, readFileSync } from 'node:fs';
@@ -7,13 +8,17 @@ import net from 'node:net';
 import { spawn } from 'node:child_process';
 import { promisify } from 'node:util';
 
+const cliArgs = new Set(process.argv.slice(2));
+const forceNonInteractive = cliArgs.has('--non-interactive');
+const smokeMode = cliArgs.has('--smoke');
+
 const rl = createInterface({ input, output });
 let inputClosed = false;
 rl.on('close', () => {
   inputClosed = true;
 });
 
-const isInteractive = Boolean(process.stdin.isTTY);
+const isInteractive = Boolean(process.stdin.isTTY) && !forceNonInteractive;
 const wait = promisify(setTimeout);
 const envPath = path.resolve('.env');
 
@@ -37,6 +42,36 @@ const runCommand = (cmd, args, opts = {}) =>
     child.on('error', reject);
   });
 
+const runCommandCapture = (cmd, args) =>
+  new Promise((resolve, reject) => {
+    const child = spawn(cmd, args, { stdio: ['ignore', 'pipe', 'pipe'] });
+    let stdout = '';
+    let stderr = '';
+    child.stdout.on('data', (chunk) => {
+      stdout += chunk.toString();
+    });
+    child.stderr.on('data', (chunk) => {
+      stderr += chunk.toString();
+    });
+    child.on('exit', (code) => {
+      if (code === 0) resolve({ stdout, stderr });
+      else reject(new Error(stderr.trim() || `${cmd} exited with code ${code}`));
+    });
+    child.on('error', reject);
+  });
+
+const waitForHealth = async (url, timeoutMs = 30000, intervalMs = 1000) => {
+  const started = Date.now();
+  while (Date.now() - started < timeoutMs) {
+    try {
+      const response = await fetch(url);
+      if (response.ok) return true;
+    } catch {}
+    await wait(intervalMs);
+  }
+  return false;
+};
+
 const parseEnv = (filePath) => {
   const data = readFileSync(filePath, 'utf8');
   const env = {};
@@ -53,6 +88,14 @@ const parseEnv = (filePath) => {
     env[key] = value;
   }
   return env;
+};
+
+const applyEnv = (env) => {
+  for (const [key, value] of Object.entries(env)) {
+    if (!process.env[key]) {
+      process.env[key] = value;
+    }
+  }
 };
 
 const testConnection = (host, port, timeoutMs = 3000) =>
@@ -165,21 +208,22 @@ const resetPostgresCredentials = async (env) => {
   const user = env.PG_USER ?? 'airapiserv';
   const password = env.PG_PASSWORD ?? 'airapiserv';
   const database = env.PG_DATABASE ?? 'airapiserv';
-  const sqlUser = `DO $$ BEGIN
-    IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = '${user.replace(/'/g, "''")}') THEN
-      CREATE ROLE ${user} LOGIN PASSWORD '${password.replace(/'/g, "''")}';
-    ELSE
-      ALTER USER ${user} WITH PASSWORD '${password.replace(/'/g, "''")}';
-    END IF;
-  END $$;`;
-  const sqlDb = `DO $$ BEGIN
-    IF NOT EXISTS (SELECT FROM pg_database WHERE datname = '${database.replace(/'/g, "''")}') THEN
-      CREATE DATABASE ${database} OWNER ${user};
-    END IF;
-  END $$;`;
+  const safeUser = user.replace(/'/g, "''");
+  const safePassword = password.replace(/'/g, "''");
+  const safeDb = database.replace(/'/g, "''");
 
-  await runCommand('sudo', ['-u', 'postgres', 'psql', '-v', 'ON_ERROR_STOP=1', '-c', sqlUser]);
-  await runCommand('sudo', ['-u', 'postgres', 'psql', '-v', 'ON_ERROR_STOP=1', '-c', sqlDb]);
+  const roleCheck = await runCommandCapture('sudo', ['-u', 'postgres', 'psql', '-tAc', `SELECT 1 FROM pg_roles WHERE rolname='${safeUser}'`]);
+  if (roleCheck.stdout.trim() !== '1') {
+    await runCommand('sudo', ['-u', 'postgres', 'psql', '-v', 'ON_ERROR_STOP=1', '-c', `CREATE ROLE ${user} LOGIN PASSWORD '${safePassword}';`]);
+  } else {
+    await runCommand('sudo', ['-u', 'postgres', 'psql', '-v', 'ON_ERROR_STOP=1', '-c', `ALTER USER ${user} WITH PASSWORD '${safePassword}';`]);
+  }
+
+  const dbCheck = await runCommandCapture('sudo', ['-u', 'postgres', 'psql', '-tAc', `SELECT 1 FROM pg_database WHERE datname='${safeDb}'`]);
+  if (dbCheck.stdout.trim() !== '1') {
+    await runCommand('sudo', ['-u', 'postgres', 'createdb', '-O', user, database]);
+  }
+
   await runCommand('sudo', ['-u', 'postgres', 'psql', '-v', 'ON_ERROR_STOP=1', '-c', `GRANT ALL PRIVILEGES ON DATABASE ${database} TO ${user};`]);
 };
 
@@ -189,6 +233,7 @@ const resetPostgresCredentials = async (env) => {
   await ensureDependencies();
 
   let env = parseEnv(envPath);
+  applyEnv(env);
   let failures = await checkServices(env);
 
   if (failures.length) {
@@ -196,6 +241,7 @@ const resetPostgresCredentials = async (env) => {
     if (wantsSetup) {
       await runCommand('pnpm', ['project:setup']);
       env = parseEnv(envPath);
+      applyEnv(env);
       failures = await checkServices(env);
     }
   }
@@ -228,6 +274,28 @@ const resetPostgresCredentials = async (env) => {
 
   console.log('\nRunning migrations...');
   await runCommand('pnpm', ['db:migrate']);
+
+  if (smokeMode) {
+    console.log('\nStarting API for smoke test...');
+    await runCommand('pnpm', ['--filter', '@airapiserv/core', '--filter', '@airapiserv/storage', 'build']);
+    const apiProc = spawn('pnpm', ['--filter', 'api', 'start'], { stdio: 'inherit' });
+    const apiPort = env.API_PORT ?? '3333';
+    const healthUrl = `http://127.0.0.1:${apiPort}/v1/health`;
+    const apiExit = new Promise((resolve) => apiProc.on('exit', resolve));
+
+    const healthy = await waitForHealth(healthUrl);
+    if (!healthy) {
+      apiProc.kill('SIGTERM');
+      await apiExit;
+      throw new Error(`API did not become healthy at ${healthUrl}`);
+    }
+
+    apiProc.kill('SIGTERM');
+    await apiExit;
+    console.log('Smoke test passed.');
+    await rl.close();
+    process.exit(0);
+  }
 
   console.log('\nStarting the dev stack (API + ingestion + WebGUI)...');
   await runCommand('pnpm', ['dev']);

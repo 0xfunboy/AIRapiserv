@@ -8,12 +8,24 @@ import net from 'node:net';
 import { spawn, spawnSync } from 'node:child_process';
 import { promisify } from 'node:util';
 
+const cliArgs = new Set(process.argv.slice(2));
+const nonInteractive = cliArgs.has('--non-interactive');
+const forceInstall = cliArgs.has('--install');
+const skipInstall = cliArgs.has('--no-install');
+const isInteractive = Boolean(process.stdin.isTTY) && !nonInteractive;
+
 const rl = createInterface({ input, output });
 const wait = promisify(setTimeout);
 const envPath = path.resolve('.env');
+const repoRoot = path.resolve('.');
+const isRoot = typeof process.getuid === 'function' && process.getuid() === 0;
+const sudoUser = process.env.SUDO_USER;
 
 const yesNo = async (question, defaultValue = true) => {
   const suffix = defaultValue ? '[Y/n]' : '[y/N]';
+  if (!isInteractive) {
+    return defaultValue;
+  }
   const answer = (await rl.question(`${question} ${suffix} `)).trim().toLowerCase();
   if (!answer) return defaultValue;
   return ['y', 'yes'].includes(answer);
@@ -22,6 +34,9 @@ const yesNo = async (question, defaultValue = true) => {
 const ask = async (question, defaultValue, tip) => {
   if (tip) {
     console.log(`> ${tip}`);
+  }
+  if (!isInteractive) {
+    return defaultValue ?? '';
   }
   const suffix = defaultValue !== undefined && defaultValue !== null ? ` (default: ${defaultValue})` : '';
   const value = (await rl.question(`${question}${suffix}: `)).trim();
@@ -61,6 +76,11 @@ const runCommand = (cmd, args, opts = {}) =>
     child.on('error', reject);
   });
 
+const runCommandCapture = (cmd, args, opts = {}) => {
+  const result = spawnSync(cmd, args, { encoding: 'utf8', ...opts });
+  return result;
+};
+
 const testConnection = (host, port, timeoutMs = 3000) =>
   new Promise((resolve) => {
     const socket = net.createConnection({ host, port }, () => {
@@ -82,6 +102,54 @@ const ensureAptAvailability = () => {
   return result.status === 0;
 };
 
+const sanitizeClickhouseUser = (user) => {
+  if (!user) return 'default';
+  const safe = user.trim();
+  if (!safe) return 'default';
+  if (!/^[A-Za-z0-9_-]+$/.test(safe)) {
+    console.log(`Invalid ClickHouse user "${user}". Falling back to "default".`);
+    return 'default';
+  }
+  return safe;
+};
+
+const configureClickHousePassword = async (config) => {
+  const clickUser = sanitizeClickhouseUser(config.clickUser);
+  const password = config.clickPassword?.trim();
+  if (!password) {
+    throw new Error('CLICKHOUSE_PASSWORD is required for local ClickHouse installs.');
+  }
+
+  const xml = `<clickhouse>
+  <users>
+    <${clickUser}>
+      <password>${password}</password>
+    </${clickUser}>
+  </users>
+</clickhouse>`;
+
+  await runCommand('bash', ['-lc', `cat <<'EOF' | sudo tee /etc/clickhouse-server/users.d/airapiserv-default.xml >/dev/null\n${xml}\nEOF`]);
+  await runCommand('sudo', ['rm', '-f', '/etc/clickhouse-server/users.d/default-password.xml']);
+  await runCommand('sudo', ['systemctl', 'restart', 'clickhouse-server']);
+
+  let clickUrl;
+  try {
+    clickUrl = new URL(config.clickHost.includes('://') ? config.clickHost : `http://${config.clickHost}`);
+  } catch {
+    clickUrl = new URL('http://127.0.0.1:8123');
+  }
+
+  const testResult = runCommandCapture('bash', [
+    '-lc',
+    `curl -s '${clickUrl.origin}/?query=SELECT%201' --user ${clickUser}:${password}`,
+  ]);
+  if (testResult.status !== 0 || !testResult.stdout.includes('1')) {
+    console.error('\nClickHouse authentication test failed. Inspect the server log for details.');
+    runCommandCapture('sudo', ['tail', '-n', '50', '/var/log/clickhouse-server/clickhouse-server.log'], { stdio: 'inherit' });
+    throw new Error('ClickHouse password configuration failed.');
+  }
+};
+
 const provisionServices = async (config) => {
   const aptAvailable = ensureAptAvailability();
   if (!aptAvailable) {
@@ -90,28 +158,31 @@ const provisionServices = async (config) => {
   }
 
   try {
-  console.log('\nInstalling Redis / Postgres (sudo permissions required)...');
-  await runCommand('sudo', ['apt-get', 'update']);
-  await runCommand('sudo', ['apt-get', 'install', '-y', 'redis-server', 'postgresql']);
+    console.log('\nInstalling Redis / Postgres (sudo permissions required)...');
+    await runCommand('sudo', ['apt-get', 'update']);
+    await runCommand('sudo', ['apt-get', 'install', '-y', 'redis-server', 'postgresql']);
 
-  console.log('\nInstalling ClickHouse repository + packages...');
-  await runCommand('sudo', ['apt-get', 'install', '-y', 'apt-transport-https', 'ca-certificates', 'curl', 'gnupg']);
-  await runCommand('sudo', ['mkdir', '-p', '/usr/share/keyrings']);
-  await runCommand('bash', ['-lc', 'sudo gpg --keyserver keyserver.ubuntu.com --recv-keys 3E4AD4719DDE9A38']);
-  await runCommand('bash', ['-lc', 'sudo gpg --export 3E4AD4719DDE9A38 | sudo gpg --dearmor -o /usr/share/keyrings/clickhouse.gpg']);
-  await runCommand('bash', [
-    '-lc',
-    'echo \"deb [signed-by=/usr/share/keyrings/clickhouse.gpg] https://packages.clickhouse.com/deb stable main\" | sudo tee /etc/apt/sources.list.d/clickhouse.list',
-  ]);
-  await runCommand('sudo', ['apt-get', 'update']);
-  await runCommand('sudo', ['apt-get', 'install', '-y', 'clickhouse-server', 'clickhouse-client']);
+    console.log('\nInstalling ClickHouse repository + packages...');
+    await runCommand('sudo', ['apt-get', 'install', '-y', 'apt-transport-https', 'ca-certificates', 'curl', 'gnupg']);
+    await runCommand('sudo', ['mkdir', '-p', '/usr/share/keyrings']);
+    await runCommand('bash', ['-lc', 'sudo gpg --keyserver keyserver.ubuntu.com --recv-keys 3E4AD4719DDE9A38']);
+    await runCommand('bash', ['-lc', 'sudo gpg --export 3E4AD4719DDE9A38 | sudo gpg --dearmor -o /usr/share/keyrings/clickhouse.gpg']);
+    await runCommand('bash', [
+      '-lc',
+      'echo \"deb [signed-by=/usr/share/keyrings/clickhouse.gpg] https://packages.clickhouse.com/deb stable main\" | sudo tee /etc/apt/sources.list.d/clickhouse.list',
+    ]);
+    await runCommand('sudo', ['apt-get', 'update']);
+    await runCommand('sudo', ['apt-get', 'install', '-y', 'clickhouse-server', 'clickhouse-client']);
 
-  console.log('\nEnabling and starting the services...');
-  await runCommand('sudo', ['systemctl', 'enable', '--now', 'redis-server']);
-  await runCommand('sudo', ['systemctl', 'enable', '--now', 'postgresql']);
-  await runCommand('sudo', ['systemctl', 'enable', '--now', 'clickhouse-server']);
+    console.log('\nEnabling and starting the services...');
+    await runCommand('sudo', ['systemctl', 'enable', '--now', 'redis-server']);
+    await runCommand('sudo', ['systemctl', 'enable', '--now', 'postgresql']);
+    await runCommand('sudo', ['systemctl', 'enable', '--now', 'clickhouse-server']);
 
-  console.log('\nConfiguring Postgres with the provided credentials...');
+    console.log('\nConfiguring ClickHouse credentials...');
+    await configureClickHousePassword(config);
+
+    console.log('\nConfiguring Postgres with the provided credentials...');
     const sqlUser = `DO $$ BEGIN
       IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = '${escapeSql(config.pgUser)}') THEN
         CREATE ROLE ${config.pgUser} LOGIN PASSWORD '${escapeSql(config.pgPassword)}';
@@ -121,15 +192,13 @@ const provisionServices = async (config) => {
     END $$;`;
     await runCommand('sudo', ['-u', 'postgres', 'psql', '-v', 'ON_ERROR_STOP=1', '-c', sqlUser]);
 
-    const sqlDb = `DO $$ BEGIN
-      IF NOT EXISTS (SELECT FROM pg_database WHERE datname = '${escapeSql(config.pgDatabase)}') THEN
-        CREATE DATABASE ${config.pgDatabase} OWNER ${config.pgUser};
-      END IF;
-    END $$;`;
-    await runCommand('sudo', ['-u', 'postgres', 'psql', '-v', 'ON_ERROR_STOP=1', '-c', sqlDb]);
+    const dbCheck = runCommandCapture('sudo', ['-u', 'postgres', 'psql', '-tAc', `SELECT 1 FROM pg_database WHERE datname='${escapeSql(config.pgDatabase)}'`]);
+    if (dbCheck.stdout.trim() !== '1') {
+      await runCommand('sudo', ['-u', 'postgres', 'createdb', '-O', config.pgUser, config.pgDatabase]);
+    }
     await runCommand('sudo', ['-u', 'postgres', 'psql', '-v', 'ON_ERROR_STOP=1', '-c', `GRANT ALL PRIVILEGES ON DATABASE ${config.pgDatabase} TO ${config.pgUser};`]);
 
-    console.log('\nRedis and ClickHouse are installed with default configs. Set passwords later in /etc/redis/redis.conf and /etc/clickhouse-server/users.d/default.xml if needed.');
+    console.log('\nRedis, ClickHouse and Postgres are installed and configured. Adjust passwords later in /etc/redis/redis.conf and /etc/clickhouse-server/users.d/airapiserv-default.xml if needed.');
   } catch (err) {
     console.error('\nAutomatic install failed:', err?.message ?? err);
     console.log('Manual fallback:');
@@ -142,6 +211,7 @@ const provisionServices = async (config) => {
     console.log('- sudo apt-get update');
     console.log('- sudo apt-get install -y clickhouse-server clickhouse-client');
     console.log('- sudo systemctl enable --now redis-server postgresql clickhouse-server');
+    console.log('- Configure ClickHouse password in /etc/clickhouse-server/users.d/airapiserv-default.xml (see README).');
   }
 };
 
@@ -169,7 +239,7 @@ const defaults = {
   redisPassword: '',
   clickHost: 'http://127.0.0.1:8123',
   clickUser: 'default',
-  clickPassword: '',
+  clickPassword: 'airapiserv',
   pgHost: '127.0.0.1',
   pgPort: '5432',
   pgUser: 'airapiserv',
@@ -199,15 +269,24 @@ const defaults = {
   let writeEnv = true;
 
   if (envExists) {
-    const overwrite = await yesNo('\nA .env file already exists. Do you want to overwrite it?', false);
-    if (!overwrite) {
+    if (!isInteractive) {
       writeEnv = false;
-      console.log('Keeping the existing .env. Using it for provisioning and checks.');
+      console.log('\nA .env file already exists. Keeping it in non-interactive mode.');
+    } else {
+      const overwrite = await yesNo('\nA .env file already exists. Do you want to overwrite it?', false);
+      if (!overwrite) {
+        writeEnv = false;
+        console.log('Keeping the existing .env. Using it for provisioning and checks.');
+      }
     }
   }
 
   let autoInstall = false;
-  if (process.platform === 'linux') {
+  if (forceInstall) {
+    autoInstall = true;
+  } else if (skipInstall || !isInteractive) {
+    autoInstall = false;
+  } else if (process.platform === 'linux') {
     autoInstall = await yesNo('\nDo you want the wizard to install/start Redis, ClickHouse and Postgres locally? (sudo + apt-get required)', true);
   } else {
     console.log('\nINFO: Automatic install is not available on this OS. Follow the manual instructions printed below.');
@@ -229,7 +308,7 @@ const defaults = {
     console.log('\n--- ClickHouse (time series) ---');
     const clickHost = await ask('ClickHouse URL', defaults.clickHost, 'Format http(s)://host:port');
     const clickUser = await ask('ClickHouse username', defaults.clickUser);
-    const clickPassword = await ask('ClickHouse password (leave empty if none)', defaults.clickPassword);
+    const clickPassword = await ask('ClickHouse password', defaults.clickPassword);
 
     console.log('\n--- Postgres (catalogue) ---');
     const pgHost = await ask('Postgres host', defaults.pgHost);
@@ -296,7 +375,7 @@ ENABLE_ROLLING_CANDLES=${config.rollingCandles}
 REDIS_URL=${config.redisUrl}
 
 CLICKHOUSE_URL=${config.clickHost}
-CLICKHOUSE_USERNAME=${config.clickUser}
+CLICKHOUSE_USER=${config.clickUser}
 CLICKHOUSE_PASSWORD=${config.clickPassword}
 
 PG_HOST=${config.pgHost}
@@ -335,7 +414,7 @@ NEXT_PUBLIC_WS_URL=ws://localhost:${config.apiPort}/v1/ws
       webPort: existingEnv.WEB_PORT ?? defaults.webPort,
       redisUrl,
       clickHost: existingEnv.CLICKHOUSE_URL ?? defaults.clickHost,
-      clickUser: existingEnv.CLICKHOUSE_USERNAME ?? defaults.clickUser,
+      clickUser: existingEnv.CLICKHOUSE_USER ?? existingEnv.CLICKHOUSE_USERNAME ?? defaults.clickUser,
       clickPassword: existingEnv.CLICKHOUSE_PASSWORD ?? defaults.clickPassword,
       pgHost: existingEnv.PG_HOST ?? defaults.pgHost,
       pgPort: existingEnv.PG_PORT ?? defaults.pgPort,
@@ -346,7 +425,14 @@ NEXT_PUBLIC_WS_URL=ws://localhost:${config.apiPort}/v1/ws
   }
 
   if (autoInstall) {
-    await provisionServices({ pgUser: config.pgUser, pgPassword: config.pgPassword, pgDatabase: config.pgDatabase });
+    await provisionServices({
+      pgUser: config.pgUser,
+      pgPassword: config.pgPassword,
+      pgDatabase: config.pgDatabase,
+      clickUser: config.clickUser,
+      clickPassword: config.clickPassword,
+      clickHost: config.clickHost,
+    });
   } else {
     console.log('\nINFO: Automatic install skipped. Make sure Redis/ClickHouse/Postgres are running with the values in .env.');
   }
@@ -384,6 +470,14 @@ NEXT_PUBLIC_WS_URL=ws://localhost:${config.apiPort}/v1/ws
   console.log('- Run `./start` to validate databases, run migrations, and launch the dev stack.');
   console.log(`- API health: http://localhost:${config.apiPort}/v1/health`);
   console.log(`- WebGUI: http://localhost:${config.webPort}`);
+  if (isRoot && sudoUser) {
+    const ownership = runCommandCapture('chown', ['-R', `${sudoUser}:${sudoUser}`, repoRoot]);
+    if (ownership.status !== 0) {
+      console.log('\nWARNING: Failed to reset repo ownership. You may need to run:');
+      console.log(`sudo chown -R ${sudoUser}:${sudoUser} ${repoRoot}`);
+    }
+  }
+
   console.log('\nTip: back up these credentials in your secret manager before deploying to production.');
 })().catch((err) => {
   console.error('Setup aborted:', err);
