@@ -197,6 +197,7 @@ async function migratePostgres() {
 
 async function migrateClickHouse() {
   const ch = getClickHouseClient();
+  await ch.command({ query: 'drop table if exists candles_1s' }).catch(() => {});
   await ch.command({
     query: `create table if not exists candles_1s (
       start_ts DateTime,

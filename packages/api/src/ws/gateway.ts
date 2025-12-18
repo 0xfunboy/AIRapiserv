@@ -12,7 +12,8 @@ interface Subscription {
 }
 
 export function registerWsGateway(fastify: FastifyInstance, marketService: MarketService) {
-  fastify.get('/v1/ws', { websocket: true }, (socket) => {
+  fastify.get('/v1/ws', { websocket: true }, (connection: any) => {
+    const socket = connection.socket as any;
     const subscriptions: Subscription[] = [];
 
     socket.on('message', async (raw: RawData) => {
