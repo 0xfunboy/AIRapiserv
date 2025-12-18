@@ -8,6 +8,7 @@ export function CompareClient() {
   const [markets, setMarkets] = useState<any[]>([]);
   const [tokens, setTokens] = useState<any[]>([]);
   const [symbol, setSymbol] = useState('');
+  const [query, setQuery] = useState('');
 
   useEffect(() => {
     const load = async () => {
@@ -33,8 +34,10 @@ export function CompareClient() {
   const symbols = useMemo(() => {
     const fromMarkets = markets.map((market) => market.symbol).filter(Boolean);
     const fromTokens = tokens.map((token) => token.symbol).filter(Boolean);
-    return Array.from(new Set([...fromMarkets, ...fromTokens])).slice(0, 500);
-  }, [markets, tokens]);
+    const all = Array.from(new Set([...fromMarkets, ...fromTokens]));
+    if (!query) return all.slice(0, 500);
+    return all.filter((s) => s?.toUpperCase().includes(query.toUpperCase()));
+  }, [markets, tokens, query]);
 
   const rows = useMemo(() => {
     return markets.filter((market) => market.symbol === symbol);
@@ -45,6 +48,12 @@ export function CompareClient() {
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-3">
+        <input
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Filter token..."
+          className="bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm"
+        />
         <select
           className="bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm"
           value={symbol}
