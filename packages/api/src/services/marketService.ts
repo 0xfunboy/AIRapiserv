@@ -279,8 +279,6 @@ export class MarketService {
   }
 
   async resetClickhouseCandles() {
-    // Allow dropping even when ClickHouse marks parts as suspicious
-    await this.clickHouse.command({ query: 'SET max_suspicious_broken_parts=5000' });
     await this.clickHouse.command({ query: 'DROP TABLE IF EXISTS candles_1s' });
     await this.clickHouse.command({
       query: `create table if not exists candles_1s (
@@ -295,7 +293,8 @@ export class MarketService {
         trades_count UInt32,
         is_final UInt8
       ) engine = MergeTree()
-      order by (market_id, start_ts);`,
+      order by (market_id, start_ts)
+      settings index_granularity = 8192, max_suspicious_broken_parts = 5000;`,
     });
   }
 
