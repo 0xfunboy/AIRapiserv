@@ -279,6 +279,8 @@ export class MarketService {
   }
 
   async resetClickhouseCandles() {
+    // Allow dropping even when ClickHouse marks parts as suspicious
+    await this.clickHouse.command({ query: 'SET max_suspicious_broken_parts=5000' });
     await this.clickHouse.command({ query: 'DROP TABLE IF EXISTS candles_1s' });
     await this.clickHouse.command({
       query: `create table if not exists candles_1s (

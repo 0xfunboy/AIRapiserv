@@ -21,8 +21,8 @@ export class AssetCatalogRepository {
 
     const assetRows = tokens.map((token) => ({
       asset_id: token.assetId,
-      symbol: token.symbol,
-      name: token.name,
+      symbol: token.symbol ?? token.name ?? 'UNKNOWN',
+      name: token.name ?? token.symbol ?? token.contractAddress ?? 'Unknown',
       primary_chain: token.chain,
       primary_contract: token.contractAddress,
       coingecko_id: (token.metadata as any)?.coingeckoId ?? null,
