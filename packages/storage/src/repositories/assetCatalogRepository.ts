@@ -103,7 +103,7 @@ export class AssetCatalogRepository {
 
     if (contracts.length) {
       await this.pg.query(
-        `insert into asset_contracts (asset_id, chain, contract_address, source, primary, first_seen_at, last_seen_at)
+        `insert into asset_contracts (asset_id, chain, contract_address, source, is_primary, first_seen_at, last_seen_at)
          select * from unnest(
            $1::text[],
            $2::text[],

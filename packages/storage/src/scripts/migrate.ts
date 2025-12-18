@@ -125,11 +125,13 @@ async function migratePostgres() {
     chain text not null,
     contract_address text not null,
     source text,
-    primary boolean default false,
+    is_primary boolean default false,
     first_seen_at timestamptz default now(),
     last_seen_at timestamptz default now(),
     primary key (asset_id, chain, contract_address)
   );`);
+  await pool.query(`alter table asset_contracts drop column if exists "primary";`);
+  await pool.query(`alter table asset_contracts add column if not exists is_primary boolean default false;`);
 
   await pool.query(`create table if not exists asset_aliases (
     asset_id text not null,
