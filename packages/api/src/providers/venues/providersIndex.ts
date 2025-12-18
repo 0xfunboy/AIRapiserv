@@ -7,6 +7,19 @@ import { KrakenVenueProvider } from './krakenVenueProvider.js';
 import { CoinbaseVenueProvider } from './coinbaseVenueProvider.js';
 import { KucoinVenueProvider } from './kucoinVenueProvider.js';
 import { GateVenueProvider } from './gateVenueProvider.js';
+import { BitfinexVenueProvider } from './bitfinexVenueProvider.js';
+import { BitstampVenueProvider } from './bitstampVenueProvider.js';
+import { MexcVenueProvider } from './mexcVenueProvider.js';
+import { HtxVenueProvider } from './htxVenueProvider.js';
+import { CryptoComVenueProvider } from './cryptocomVenueProvider.js';
+import { GeminiVenueProvider } from './geminiVenueProvider.js';
+import { UpbitVenueProvider } from './upbitVenueProvider.js';
+import { BitgetVenueProvider } from './bitgetVenueProvider.js';
+import { PhemexVenueProvider } from './phemexVenueProvider.js';
+import { HyperliquidVenueProvider } from './hyperliquidVenueProvider.js';
+import { DydxVenueProvider } from './dydxVenueProvider.js';
+import { BitmexVenueProvider } from './bitmexVenueProvider.js';
+import { DeribitVenueProvider } from './deribitVenueProvider.js';
 
 const VENUE_DEFS: Array<{ name: string; caps: VenueCapabilities }> = [
   { name: 'binance', caps: { hasSpot: true, hasPerp: true, wsTrades: true, wsKlines: true, restOhlcv: true } },
@@ -54,7 +67,45 @@ export const venueProvidersWithReal: VenueProvider[] = [
   new CoinbaseVenueProvider(),
   new KucoinVenueProvider(),
   new GateVenueProvider(),
-  ...VENUE_DEFS.filter((d) => !['binance', 'bybit', 'okx', 'kraken', 'coinbase', 'kucoin', 'gate'].includes(d.name)).map(
+  new BitfinexVenueProvider(),
+  new BitstampVenueProvider(),
+  new MexcVenueProvider(),
+  new HtxVenueProvider(),
+  new CryptoComVenueProvider(),
+  new GeminiVenueProvider(),
+  new UpbitVenueProvider(),
+  new BitgetVenueProvider(),
+  new PhemexVenueProvider(),
+  new HyperliquidVenueProvider(),
+  new DydxVenueProvider(),
+  new BitmexVenueProvider(),
+  new DeribitVenueProvider(),
+  ...VENUE_DEFS.filter((d) =>
+    [
+      'binance',
+      'bybit',
+      'okx',
+      'kraken',
+      'coinbase',
+      'kucoin',
+      'gate',
+      'bitfinex',
+      'bitstamp',
+      'mexc',
+      'htx',
+      'cryptocom',
+      'gemini',
+      'upbit',
+      'bitget',
+      'phemex',
+      'hyperliquid',
+      'dydx',
+      'bitmex',
+      'deribit',
+    ].includes(d.name)
+      ? false
+      : true
+  ).map(
     (def) => new StubVenueProvider(def.name, def.caps)
   ),
 ];
