@@ -1,5 +1,6 @@
 import { TokenRepository, TokenVenueRecord } from '@airapiserv/storage';
 import { selectPrioritySource } from '@airapiserv/core';
+import { OhlcvService } from './ohlcvService.js';
 
 const SOURCE_MAPPING: Record<string, string> = {
   binance: 'BINANCE_WS',
@@ -27,6 +28,7 @@ const SOURCE_MAPPING: Record<string, string> = {
 export class TokenDirectoryService {
   private readonly repo = new TokenRepository();
   private readonly logger: any;
+  private readonly ohlcv = new OhlcvService();
   constructor(logger?: any) {
     this.logger = logger?.child ? logger.child({ name: 'token-directory' }) : console;
   }
@@ -40,7 +42,12 @@ export class TokenDirectoryService {
   }
 
   async getOhlcv(params: { tokenId: string; timeframe: string; from?: number; to?: number; limit?: number }) {
-    return this.repo.getCandles(params.tokenId, params.timeframe, params.from, params.to, params.limit ?? 200);
+    let candles = await this.repo.getCandles(params.tokenId, params.timeframe, params.from, params.to, params.limit ?? 200);
+    if (!candles.length) {
+      await this.ohlcv.fetchAndStore(params.tokenId, params.timeframe, params.limit ?? 200);
+      candles = await this.repo.getCandles(params.tokenId, params.timeframe, params.from, params.to, params.limit ?? 200);
+    }
+    return candles;
   }
 
   async updatePrioritySource(tokenId: string, venues: TokenVenueRecord[]) {

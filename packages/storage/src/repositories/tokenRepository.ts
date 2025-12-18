@@ -44,6 +44,21 @@ export type CandleRecord = {
 export class TokenRepository {
   private readonly pg = getPgPool();
 
+  async getToken(tokenId: string) {
+    const res = await this.pg.query(
+      `select token_id as "tokenId",
+              symbol,
+              name,
+              chain,
+              contract_address as "contractAddress",
+              priority_source as "prioritySource"
+       from tokens
+       where token_id = $1`,
+      [tokenId]
+    );
+    return res.rows?.[0] ?? null;
+  }
+
   async upsertTokens(tokens: TokenRecord[]) {
     if (!tokens.length) return;
     const now = new Date();
