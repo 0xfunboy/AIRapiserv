@@ -53,4 +53,22 @@ export class MarketsCacheRepository {
       updatedAt: string;
     }>;
   }
+
+  async listAll(limit = 500000) {
+    const res = await this.pg.query(
+      `select venue, market_type as "marketType", base_symbol as "baseSymbol", quote_symbol as "quoteSymbol", venue_symbol as "venueSymbol", updated_at as "updatedAt"
+       from markets_cache
+       order by updated_at desc
+       limit $1`,
+      [limit]
+    );
+    return res.rows as Array<{
+      venue: string;
+      marketType: string;
+      baseSymbol: string | null;
+      quoteSymbol: string | null;
+      venueSymbol: string;
+      updatedAt: string;
+    }>;
+  }
 }

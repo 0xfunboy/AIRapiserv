@@ -4,14 +4,12 @@ import { venueProvidersWithReal } from '../providers/venues/providersIndex.js';
 
 type CoverageOptions = {
   quotePreference?: string[];
+  marketType?: 'spot' | 'perp' | 'all';
 };
 
 const DEFAULT_QUOTES = ['USDT', 'USDC', 'USD', 'EUR', 'BTC', 'ETH'];
 
-const capsMap = new Map(
-  venueProvidersWithReal.map((p) => [p.name, p.capabilities])
-);
-
+const capsMap = new Map(venueProvidersWithReal.map((p) => [p.name, p.capabilities]));
 const sourceName = (venue: string) => `${venue.toUpperCase()}_WS`;
 
 export class CoverageService {
@@ -25,13 +23,15 @@ export class CoverageService {
 
   async run(opts: CoverageOptions = {}) {
     const quotePref = opts.quotePreference ?? DEFAULT_QUOTES;
+    const filterType = opts.marketType ?? 'spot';
     const tokens = await this.tokens.listActiveTokens();
     if (!tokens.length) return;
-    const symbols = tokens.map((t) => t.symbol.toUpperCase());
-    const markets = await this.markets.listByBaseSymbols(symbols);
+    const markets = await this.markets.listAll();
     const marketsByBase = new Map<string, typeof markets>();
     for (const m of markets) {
       const key = (m.baseSymbol ?? '').toUpperCase();
+      if (!key) continue;
+      if (filterType !== 'all' && m.marketType !== filterType) continue;
       if (!marketsByBase.has(key)) marketsByBase.set(key, []);
       marketsByBase.get(key)!.push(m);
     }
@@ -47,13 +47,18 @@ export class CoverageService {
     for (const token of tokens) {
       const ms = marketsByBase.get(token.symbol.toUpperCase()) ?? [];
       if (!ms.length) {
-        priorityUpdates.push({ tokenId: token.tokenId, source: null });
+        priorityUpdates.push({ tokenId: token.tokenId, source: 'API_FALLBACK' });
         continue;
       }
-      const sorted = ms.sort((a, b) => quoteRank(a.quoteSymbol) - quoteRank(b.quoteSymbol));
+      const sorted = ms
+        .filter((m) => m.baseSymbol && token.symbol && m.baseSymbol.toUpperCase() === token.symbol.toUpperCase())
+        .sort((a, b) => quoteRank(a.quoteSymbol) - quoteRank(b.quoteSymbol));
+
       const sources: string[] = [];
       for (const m of sorted) {
         const caps = capsMap.get(m.venue);
+        const wsSupported = Boolean(caps?.wsTrades || caps?.wsKlines);
+        const ohlcvSupported = Boolean(caps?.wsKlines || caps?.restOhlcv);
         venuesToUpsert.push({
           tokenId: token.tokenId,
           venue: m.venue,
@@ -61,17 +66,17 @@ export class CoverageService {
           baseSymbol: m.baseSymbol,
           quoteSymbol: m.quoteSymbol,
           venueSymbol: m.venueSymbol,
-          wsSupported: Boolean(caps?.wsTrades || caps?.wsKlines),
-          ohlcvSupported: Boolean(caps?.wsKlines || caps?.restOhlcv),
+          wsSupported,
+          ohlcvSupported,
         });
-        if (caps?.wsTrades || caps?.wsKlines) {
+        if (wsSupported) {
           sources.push(sourceName(m.venue));
-        } else if (caps?.restOhlcv) {
+        } else if (ohlcvSupported) {
           sources.push('REST_EXCHANGE');
         }
       }
       const best = selectPrioritySource(Array.from(new Set(sources)));
-      priorityUpdates.push({ tokenId: token.tokenId, source: best });
+      priorityUpdates.push({ tokenId: token.tokenId, source: best ?? 'API_FALLBACK' });
     }
 
     if (venuesToUpsert.length) {
