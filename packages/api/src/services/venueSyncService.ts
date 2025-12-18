@@ -1,5 +1,5 @@
 import { MarketsCacheRepository } from '@airapiserv/storage';
-import { venueProviders } from '../providers/venues/providersIndex.js';
+import { venueProvidersWithReal as venueProviders } from '../providers/venues/providersIndex.js';
 
 export class VenueSyncService {
   private readonly repo = new MarketsCacheRepository();

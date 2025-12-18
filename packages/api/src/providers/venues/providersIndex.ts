@@ -1,5 +1,8 @@
 import { VenueProvider, VenueCapabilities, VenueMarket } from '@airapiserv/core';
 import { BaseVenueProvider } from './baseVenueProvider.js';
+import { BinanceVenueProvider } from './binanceVenueProvider.js';
+import { BybitVenueProvider } from './bybitVenueProvider.js';
+import { OkxVenueProvider } from './okxVenueProvider.js';
 
 const VENUE_DEFS: Array<{ name: string; caps: VenueCapabilities }> = [
   { name: 'binance', caps: { hasSpot: true, hasPerp: true, wsTrades: true, wsKlines: true, restOhlcv: true } },
@@ -39,3 +42,11 @@ class StubVenueProvider extends BaseVenueProvider implements VenueProvider {
 }
 
 export const venueProviders: VenueProvider[] = VENUE_DEFS.map((def) => new StubVenueProvider(def.name, def.caps));
+export const venueProvidersWithReal: VenueProvider[] = [
+  new BinanceVenueProvider(),
+  new BybitVenueProvider(),
+  new OkxVenueProvider(),
+  ...VENUE_DEFS.filter((d) => !['binance', 'bybit', 'okx'].includes(d.name)).map(
+    (def) => new StubVenueProvider(def.name, def.caps)
+  ),
+];
