@@ -167,6 +167,8 @@ async function migratePostgres() {
     metadata jsonb default '{}'::jsonb
   );`);
 
+  await pool.query(`alter table markets alter column base_asset_id drop not null;`);
+  await pool.query(`alter table markets alter column quote_asset_id drop not null;`);
   await pool.query(`alter table markets add column if not exists ws_capable boolean default false;`);
   await pool.query(`alter table markets add column if not exists rest_capable boolean default true;`);
   await pool.query(`alter table markets add column if not exists discovered_at timestamptz default now();`);

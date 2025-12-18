@@ -33,7 +33,8 @@ export class TokenCatalogRepository {
         $4::text[],
         $5::text[],
         $6::text[][],
-        $7::jsonb[]
+        $7::jsonb[],
+        $8::timestamptz[]
       )
       on conflict (token_key) do update set
         symbol = coalesce(excluded.symbol, token_catalog.symbol),
@@ -49,7 +50,8 @@ export class TokenCatalogRepository {
         updated_at = now()
     `;
 
-    await this.pg.query(query, [tokenKeys, symbols, names, chains, contracts, sources, metadata]);
+    const now = new Date();
+    await this.pg.query(query, [tokenKeys, symbols, names, chains, contracts, sources, metadata, tokens.map(() => now)]);
   }
 
   async listTokens(params: { q?: string; limit?: number; offset?: number }) {
