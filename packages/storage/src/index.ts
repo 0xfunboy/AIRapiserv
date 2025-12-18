@@ -5,3 +5,6 @@ export * from './repositories/candleRepository.js';
 export * from './repositories/tokenCatalogRepository.js';
 export * from './repositories/assetCatalogRepository.js';
 export * from './repositories/marketRepository.js';
+export * from './repositories/tokenRepository.js';
+export * from './repositories/taskQueueRepository.js';
+export * from './repositories/requestMetricsRepository.js';

@@ -98,6 +98,74 @@ async function checkConnections() {
 
 async function migratePostgres() {
   const pool = getPgPool();
+  await pool.query(`create extension if not exists pgcrypto;`);
+
+  await pool.query(`create table if not exists tokens (
+    token_id uuid primary key default gen_random_uuid(),
+    symbol text,
+    name text,
+    chain text,
+    contract_address text,
+    coingecko_id text,
+    coinmarketcap_id text,
+    cryptocompare_id text,
+    codex_id text,
+    dextools_id text,
+    status text default 'active',
+    priority_source text,
+    discovery_confidence real default 0.0,
+    first_seen_at timestamptz default now(),
+    last_seen_at timestamptz default now(),
+    unique (chain, contract_address)
+  );`);
+  await pool.query(`create index if not exists idx_tokens_symbol on tokens(symbol);`);
+
+  await pool.query(`create table if not exists token_venues (
+    token_id uuid references tokens(token_id) on delete cascade,
+    venue text not null,
+    market_type text not null,
+    base_symbol text,
+    quote_symbol text,
+    venue_symbol text not null,
+    ws_supported boolean default false,
+    ohlcv_supported boolean default false,
+    last_verified_at timestamptz default now(),
+    primary key (token_id, venue, market_type, venue_symbol)
+  );`);
+
+  await pool.query(`create table if not exists candles (
+    token_id uuid not null references tokens(token_id) on delete cascade,
+    venue text not null,
+    timeframe text not null,
+    open_time bigint not null,
+    open double precision not null,
+    high double precision not null,
+    low double precision not null,
+    close double precision not null,
+    volume double precision not null,
+    source text not null,
+    primary key (token_id, venue, timeframe, open_time)
+  );`);
+
+  await pool.query(`create table if not exists tasks (
+    task_id uuid primary key default gen_random_uuid(),
+    type text not null,
+    priority int not null default 10,
+    payload jsonb default '{}'::jsonb,
+    run_after timestamptz,
+    status text not null default 'pending',
+    attempts int not null default 0,
+    last_error text,
+    created_at timestamptz default now(),
+    updated_at timestamptz default now()
+  );`);
+  await pool.query(`create index if not exists idx_tasks_status_priority on tasks(status, priority desc, coalesce(run_after, now()));`);
+
+  await pool.query(`create table if not exists request_metrics (
+    bucket_start timestamptz primary key,
+    request_count int not null default 0
+  );`);
+
   await pool.query(`create table if not exists assets (
     asset_id text primary key,
     symbol text,
