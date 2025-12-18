@@ -9,6 +9,7 @@ import { MarketService } from './services/marketService.js';
 import { TokenCatalogService } from './services/tokenCatalogService.js';
 import { registerV1Routes } from './routes/v1.js';
 import { registerWsGateway } from './ws/gateway.js';
+import { registerApiRoutes } from './routes/api.js';
 import { startIdleScheduler } from './services/idleScheduler.js';
 import { RequestMetricsRepository, TaskQueueRepository } from '@airapiserv/storage';
 import { DiscoveryService } from './services/discoveryService.js';
@@ -52,6 +53,7 @@ server.addHook('onRequest', async () => {
 });
 
 server.register(async (instance) => registerV1Routes(instance, { marketService, tokenCatalogService, configService }), { prefix: '/v1' });
+server.register(async (instance) => registerApiRoutes(instance), { prefix: '/api' });
 registerWsGateway(server, marketService);
 tokenCatalogService.start();
 

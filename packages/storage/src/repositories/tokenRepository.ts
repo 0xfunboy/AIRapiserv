@@ -179,4 +179,58 @@ export class TokenRepository {
         source = excluded.source;`;
     await this.pg.query(sql, [JSON.stringify(candles)]);
   }
+
+  async searchTokens(q: string, limit = 50) {
+    const search = `%${q}%`;
+    const res = await this.pg.query(
+      `select token_id as "tokenId",
+              symbol,
+              name,
+              chain,
+              contract_address as "contractAddress",
+              priority_source as "prioritySource",
+              discovery_confidence as "discoveryConfidence"
+       from tokens
+       where symbol ilike $1 or name ilike $1 or contract_address ilike $1
+       order by last_seen_at desc
+       limit $2`,
+      [search, limit]
+    );
+    return res.rows;
+  }
+
+  async getVenues(tokenId: string) {
+    const res = await this.pg.query(
+      `select venue, market_type as "marketType", base_symbol as "baseSymbol", quote_symbol as "quoteSymbol",
+              venue_symbol as "venueSymbol", ws_supported as "wsSupported", ohlcv_supported as "ohlcvSupported",
+              last_verified_at as "lastVerifiedAt"
+       from token_venues
+       where token_id = $1`,
+      [tokenId]
+    );
+    return res.rows;
+  }
+
+  async getCandles(tokenId: string, timeframe: string, from?: number, to?: number, limit = 200) {
+    const params: any[] = [tokenId, timeframe];
+    let where = 'token_id = $1 and timeframe = $2';
+    if (from) {
+      params.push(from);
+      where += ` and open_time >= $${params.length}`;
+    }
+    if (to) {
+      params.push(to);
+      where += ` and open_time <= $${params.length}`;
+    }
+    params.push(limit);
+    const res = await this.pg.query(
+      `select venue, open_time as "openTime", open, high, low, close, volume, source
+       from candles
+       where ${where}
+       order by open_time desc
+       limit $${params.length}`,
+      params
+    );
+    return res.rows;
+  }
 }

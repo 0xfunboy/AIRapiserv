@@ -4,18 +4,10 @@ export const dynamic = 'force-dynamic';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? 'http://localhost:3333';
 
-async function fetchTokens(): Promise<any[]> {
-  try {
-    const res = await fetch(`${API_BASE}/v1/tokens?limit=200`, { cache: 'no-store' });
-    if (!res.ok) return [];
-    return res.json();
-  } catch {
-    return [];
-  }
-}
-
 export default async function TokensPage() {
-  const tokens = await fetchTokens();
+  const tokens = await fetch(`${API_BASE}/api/tokens/search?q=%25&limit=200`, { cache: 'no-store' })
+    .then((res) => (res.ok ? res.json() : []))
+    .catch(() => []);
 
   return (
     <section className="space-y-6">

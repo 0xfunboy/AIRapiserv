@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { CandlesChart } from '../../../components/CandlesChart';
 
 export const dynamic = 'force-dynamic';
 
@@ -18,8 +19,20 @@ function Badge({ children }: { children: React.ReactNode }) {
   return <span className="px-2 py-1 rounded-md bg-slate-800 text-xs text-slate-200">{children}</span>;
 }
 
+async function fetchCandles(tokenId: string, timeframe: string) {
+  try {
+    const res = await fetch(`${API_BASE}/api/tokens/${encodeURIComponent(tokenId)}/ohlcv?timeframe=${timeframe}`, { cache: 'no-store' });
+    if (!res.ok) return [];
+    const data = await res.json();
+    return data.candles ?? [];
+  } catch {
+    return [];
+  }
+}
+
 export default async function TokenDetailPage({ params }: { params: { tokenKey: string } }) {
   const token = await fetchToken(params.tokenKey);
+  const candles = await fetchCandles(params.tokenKey, '1m');
 
   if (!token) {
     return (
@@ -121,6 +134,14 @@ export default async function TokenDetailPage({ params }: { params: { tokenKey: 
             </tbody>
           </table>
         </div>
+      </div>
+
+      <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 space-y-3">
+        <div className="flex items-center justify-between">
+          <h3 className="text-lg font-semibold">OHLCV (1m)</h3>
+          <span className="text-xs text-slate-500">Source: Postgres candles</span>
+        </div>
+        <CandlesChart candles={candles} />
       </div>
 
       <div className="grid gap-4 md:grid-cols-2">
