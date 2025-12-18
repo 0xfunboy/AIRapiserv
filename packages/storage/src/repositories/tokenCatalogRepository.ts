@@ -24,18 +24,21 @@ export class TokenCatalogRepository {
     const sources = tokens.map((token) => token.sources);
     const metadata = tokens.map((token) => token.metadata);
 
-    const query = `
+    const now = new Date();
+    await this.pg.query(
+      `
       insert into token_catalog (token_key, symbol, name, chain, contract_address, sources, metadata, updated_at)
-      select
-        $1[idx],
-        $2[idx],
-        $3[idx],
-        $4[idx],
-        $5[idx],
-        $6[idx],
-        $7[idx],
-        $8[idx]
-      from generate_subscripts($1::text[], 1) as idx
+      select *
+      from unnest(
+        $1::text[],
+        $2::text[],
+        $3::text[],
+        $4::text[],
+        $5::text[],
+        $6::text[][],
+        $7::jsonb[],
+        $8::timestamptz[]
+      )
       on conflict (token_key) do update set
         symbol = coalesce(excluded.symbol, token_catalog.symbol),
         name = coalesce(excluded.name, token_catalog.name),
@@ -47,11 +50,10 @@ export class TokenCatalogRepository {
           )
         ),
         metadata = token_catalog.metadata || excluded.metadata,
-        updated_at = now()
-    `;
-
-    const now = new Date();
-    await this.pg.query(query, [tokenKeys, symbols, names, chains, contracts, sources, metadata, tokens.map(() => now)]);
+        updated_at = now();
+    `,
+      [tokenKeys, symbols, names, chains, contracts, sources, metadata, tokens.map(() => now)]
+    );
   }
 
   async listTokens(params: { q?: string; limit?: number; offset?: number }) {
