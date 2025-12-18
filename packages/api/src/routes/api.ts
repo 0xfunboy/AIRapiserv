@@ -1,9 +1,11 @@
 import { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { TokenDirectoryService } from '../services/tokenDirectoryService.js';
+import { TaskQueueRepository } from '@airapiserv/storage';
 
 export async function registerApiRoutes(fastify: FastifyInstance) {
   const tokens = new TokenDirectoryService(fastify.log);
+  const tasks = new TaskQueueRepository();
 
   fastify.get('/tokens/search', async (request) => {
     const schema = z.object({ q: z.string(), limit: z.coerce.number().min(1).max(200).optional() });
@@ -34,5 +36,15 @@ export async function registerApiRoutes(fastify: FastifyInstance) {
     });
     const candles = await tokens.getOhlcv(params);
     return { candles, backfill_pending: false };
+  });
+
+  fastify.post('/admin/tasks/trigger', async (request) => {
+    const schema = z.object({
+      type: z.enum(['DISCOVER_TOKENS_API', 'SYNC_VENUE_MARKETS', 'RESOLVE_TOKEN_VENUES']),
+      priority: z.coerce.number().optional(),
+    });
+    const body = schema.parse(request.body);
+    const id = await tasks.enqueue({ type: body.type, priority: body.priority });
+    return { enqueued: true, taskId: id };
   });
 }

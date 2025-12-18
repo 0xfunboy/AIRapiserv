@@ -1,9 +1,11 @@
 import { TaskQueueRepository } from '@airapiserv/storage';
 import { DiscoveryService } from './discoveryService.js';
 import { VenueSyncService } from './venueSyncService.js';
+import { CoverageService } from './coverageService.js';
 
 const discovery = new DiscoveryService();
 const venueSync = new VenueSyncService();
+const coverage = new CoverageService();
 const queue = new TaskQueueRepository();
 
 export async function runNextTask() {
@@ -16,6 +18,9 @@ export async function runNextTask() {
         break;
       case 'SYNC_VENUE_MARKETS':
         await venueSync.run();
+        break;
+      case 'RESOLVE_TOKEN_VENUES':
+        await coverage.run();
         break;
       default:
         break;

@@ -233,4 +233,22 @@ export class TokenRepository {
     );
     return res.rows;
   }
+
+  async listActiveTokens(limit = 5000) {
+    const res = await this.pg.query(
+      `select token_id as "tokenId",
+              symbol,
+              priority_source as "prioritySource"
+       from tokens
+       where status = 'active' and symbol is not null
+       order by last_seen_at desc
+       limit $1`,
+      [limit]
+    );
+    return res.rows as Array<{ tokenId: string; symbol: string; prioritySource: string | null }>;
+  }
+
+  async setPrioritySource(tokenId: string, source: string | null) {
+    await this.pg.query(`update tokens set priority_source = $2, last_seen_at = now() where token_id = $1`, [tokenId, source]);
+  }
 }

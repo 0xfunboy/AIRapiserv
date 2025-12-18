@@ -33,4 +33,24 @@ export class MarketsCacheRepository {
         updated_at = excluded.updated_at;`;
     await this.pg.query(sql, [JSON.stringify(rows)]);
   }
+
+  async listByBaseSymbols(symbols: string[]) {
+    if (!symbols.length) return [];
+    const upper = symbols.map((s) => (s ?? '').toUpperCase()).filter(Boolean);
+    if (!upper.length) return [];
+    const res = await this.pg.query(
+      `select venue, market_type as "marketType", base_symbol as "baseSymbol", quote_symbol as "quoteSymbol", venue_symbol as "venueSymbol", updated_at as "updatedAt"
+       from markets_cache
+       where upper(base_symbol) = any($1)`,
+      [upper]
+    );
+    return res.rows as Array<{
+      venue: string;
+      marketType: string;
+      baseSymbol: string | null;
+      quoteSymbol: string | null;
+      venueSymbol: string;
+      updatedAt: string;
+    }>;
+  }
 }
