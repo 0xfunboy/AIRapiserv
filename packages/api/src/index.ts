@@ -62,6 +62,8 @@ tokenCatalogService.start();
   await taskQueue.enqueue({ type: 'DISCOVER_TOKENS_API', priority: 50 });
   await taskQueue.enqueue({ type: 'SYNC_VENUE_MARKETS', priority: 40 });
   await taskQueue.enqueue({ type: 'RESOLVE_TOKEN_VENUES', priority: 35 });
+  // periodic maintenance placeholders
+  await taskQueue.enqueue({ type: 'REVERIFY_API_ONLY', priority: 20, runAfter: new Date(Date.now() + 60 * 60 * 1000) });
 })();
 
 startIdleScheduler(server.log, { intervalMs: 5000, idleThreshold: Number(process.env.IDLE_REQUEST_THRESHOLD ?? 5) });

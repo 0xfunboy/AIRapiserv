@@ -2,6 +2,7 @@ import { TaskQueueRepository } from '@airapiserv/storage';
 import { DiscoveryService } from './discoveryService.js';
 import { VenueSyncService } from './venueSyncService.js';
 import { CoverageService } from './coverageService.js';
+import { TaskType } from './taskTypes.js';
 
 const discovery = new DiscoveryService();
 const venueSync = new VenueSyncService();
@@ -12,7 +13,7 @@ export async function runNextTask() {
   const task = await queue.fetchNext();
   if (!task) return null;
   try {
-    switch (task.type) {
+    switch (task.type as TaskType) {
       case 'DISCOVER_TOKENS_API':
         await discovery.run();
         break;
@@ -21,6 +22,15 @@ export async function runNextTask() {
         break;
       case 'RESOLVE_TOKEN_VENUES':
         await coverage.run();
+        break;
+      case 'INGEST_OHLCV_API':
+        // placeholder: ingestion service to be implemented
+        break;
+      case 'INGEST_OHLCV_WS':
+        // placeholder: ingestion service to be implemented
+        break;
+      case 'REVERIFY_API_ONLY':
+        // placeholder: reverify service to be implemented
         break;
       default:
         break;
