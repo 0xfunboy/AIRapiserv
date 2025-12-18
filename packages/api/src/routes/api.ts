@@ -28,7 +28,10 @@ export async function registerApiRoutes(fastify: FastifyInstance) {
       to: z.coerce.number().optional(),
       limit: z.coerce.number().optional(),
     });
-    const params = schema.parse(request.query ?? { ...request.params, ...request.query });
+    const params = schema.parse({
+      ...(request.params as any),
+      ...(request.query as any),
+    });
     const candles = await tokens.getOhlcv(params);
     return { candles, backfill_pending: false };
   });
