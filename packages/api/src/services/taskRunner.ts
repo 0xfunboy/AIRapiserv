@@ -3,10 +3,14 @@ import { DiscoveryService } from './discoveryService.js';
 import { VenueSyncService } from './venueSyncService.js';
 import { CoverageService } from './coverageService.js';
 import { TaskType } from './taskTypes.js';
+import { IngestionService } from './ingestionService.js';
+import { ReverifyService } from './reverifyService.js';
 
 const discovery = new DiscoveryService();
 const venueSync = new VenueSyncService();
 const coverage = new CoverageService();
+const ingestion = new IngestionService();
+const reverify = new ReverifyService();
 const queue = new TaskQueueRepository();
 
 export async function runNextTask() {
@@ -24,13 +28,13 @@ export async function runNextTask() {
         await coverage.run();
         break;
       case 'INGEST_OHLCV_API':
-        // placeholder: ingestion service to be implemented
+        await ingestion.ingestOhlcvApi((task.payload as any) ?? {});
         break;
       case 'INGEST_OHLCV_WS':
         // placeholder: ingestion service to be implemented
         break;
       case 'REVERIFY_API_ONLY':
-        // placeholder: reverify service to be implemented
+        await reverify.run();
         break;
       default:
         break;

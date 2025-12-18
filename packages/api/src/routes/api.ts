@@ -39,6 +39,25 @@ export async function registerApiRoutes(fastify: FastifyInstance) {
     return { candles, backfill_pending: false };
   });
 
+  fastify.post('/tokens/:tokenId/ohlcv/backfill', async (request) => {
+    const schema = z.object({
+      tokenId: z.string(),
+      timeframe: z.string(),
+      limit: z.coerce.number().optional(),
+    });
+    const params = schema.parse({
+      ...(request.params as any),
+      ...(request.body as any),
+    });
+    // enqueue high-priority API ingestion
+    const id = await tasks.enqueue({
+      type: 'INGEST_OHLCV_API',
+      priority: 120,
+      payload: { tokenId: params.tokenId, timeframe: params.timeframe, limit: params.limit },
+    });
+    return { enqueued: true, taskId: id };
+  });
+
   fastify.post('/admin/tasks/trigger', async (request) => {
     const schema = z.object({
       type: z.enum(['DISCOVER_TOKENS_API', 'SYNC_VENUE_MARKETS', 'RESOLVE_TOKEN_VENUES', 'INGEST_OHLCV_API', 'INGEST_OHLCV_WS', 'REVERIFY_API_ONLY']),
