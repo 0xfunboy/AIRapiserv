@@ -92,6 +92,16 @@ export async function registerV1Routes(
     return tokenCatalogService.listTokens(query);
   });
 
+  fastify.get('/tokens/:tokenKey', async (request, reply) => {
+    const schema = z.object({ tokenKey: z.string() });
+    const params = schema.parse(request.params);
+    const detail = await tokenCatalogService.getTokenDetail(params.tokenKey);
+    if (!detail) {
+      return reply.status(404).send({ message: 'token not found' });
+    }
+    return detail;
+  });
+
   fastify.post('/tokens/refresh', async () => {
     fastify.log.info('Manual token refresh requested');
     return tokenCatalogService.refreshTokens({ force: true });

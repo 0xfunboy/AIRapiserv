@@ -14,6 +14,7 @@ All endpoints live under `/v1`. Public access uses JWT (`Authorization: Bearer <
 | `GET /v1/providers` | `marketType`, `requestType`, `supportsWs?` | Provider priority for each request type |
 | `GET /v1/markets` | `limit?` | Active markets detected in Redis |
 | `GET /v1/tokens` | `q?`, `limit?`, `offset?` | Token catalog search |
+| `GET /v1/tokens/:tokenKey` | - | Token detail (contracts, sources, markets) |
 | `POST /v1/tokens/refresh` | - | Force token catalog refresh |
 | `GET /v1/config` | - | Runtime config (safe subset, keys redacted) |
 | `POST /v1/config` | JSON body | Update runtime config overrides |

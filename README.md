@@ -141,6 +141,8 @@ Optional sources:
 - CoinGecko, CoinMarketCap, CryptoCompare, DexScreener (enabled automatically if keys are present).
 - DEXTools/Codex can be added by setting `DEXTOOLS_TOKEN_LIST_URL` / `CODEX_TOKEN_LIST_URL` in `.env`.
 
+All discoveries are persisted in Postgres (`assets`, `asset_contracts`, `asset_aliases`, `asset_sources`, `token_catalog`) and never deleted automatically. Each refresh upserts records, preserving history and first-seen metadata. The WebGUI exposes the catalog and per-token drilldown pages under `/tokens`.
+
 ### Fallback market snapshots (fast DB warmup)
 
 To populate the UI quickly, the ingestors also run a low-frequency snapshot fetch:

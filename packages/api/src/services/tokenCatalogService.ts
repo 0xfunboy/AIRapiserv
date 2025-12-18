@@ -1,4 +1,4 @@
-import { TokenCatalogRepository } from '@airapiserv/storage';
+import { TokenCatalogRepository, AssetCatalogRepository } from '@airapiserv/storage';
 import { loadEnv } from '../config/loadEnv.js';
 import { ConfigService } from './configService.js';
 
@@ -24,6 +24,7 @@ const DEFAULT_REFRESH_MS = 30 * 60 * 1000;
 
 export class TokenCatalogService {
   private readonly repo = new TokenCatalogRepository();
+  private readonly assetRepo = new AssetCatalogRepository();
   private readonly logger: { info: (...args: any[]) => void; warn: (...args: any[]) => void; error: (...args: any[]) => void };
   private readonly configService?: ConfigService;
   private lastRefreshAt = 0;
@@ -99,6 +100,10 @@ export class TokenCatalogService {
     return this.lastStats;
   }
 
+  async getTokenDetail(tokenKey: string) {
+    return this.assetRepo.getTokenDetail(tokenKey);
+  }
+
   async getStats() {
     const dbStats = await this.repo.countTokens();
     return {
@@ -110,7 +115,7 @@ export class TokenCatalogService {
   }
 
   async listTokens(params: { q?: string; limit?: number; offset?: number }) {
-    return this.repo.listTokens(params);
+    return this.assetRepo.listTokens(params);
   }
 
   private async doRefresh(): Promise<RefreshResult> {
@@ -155,7 +160,21 @@ export class TokenCatalogService {
     sourceTokens.forEach((token) => mergeToken(token));
 
     const tokens = Array.from(tokenMap.values());
-    await this.repo.upsertTokens(tokens);
+    await Promise.all([
+      this.repo.upsertTokens(tokens),
+      this.assetRepo.upsertAssets(
+        tokens.map((token) => ({
+          assetId: token.tokenKey,
+          symbol: token.symbol,
+          name: token.name,
+          chain: token.chain,
+          contractAddress: token.contractAddress,
+          sources: token.sources,
+          metadata: token.metadata,
+          firstSeenSource: token.sources[0] ?? 'unknown',
+        }))
+      ),
+    ]);
 
     this.lastRefreshAt = Date.now();
     this.lastStats = {

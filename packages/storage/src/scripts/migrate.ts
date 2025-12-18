@@ -100,25 +100,76 @@ async function migratePostgres() {
   const pool = getPgPool();
   await pool.query(`create table if not exists assets (
     asset_id text primary key,
-    name text not null,
-    symbol text not null,
-    chain_id text,
-    contract_addresses jsonb default '{}'::jsonb,
-    aliases text[] default array[]::text[],
-    created_at timestamptz default now()
+    symbol text,
+    name text,
+    primary_chain text,
+    primary_contract text,
+    coingecko_id text,
+    coinmarketcap_id text,
+    defillama_id text,
+    first_seen_source text,
+    first_seen_at timestamptz default now(),
+    updated_at timestamptz default now()
+  );`);
+  await pool.query(`alter table assets add column if not exists primary_chain text;`);
+  await pool.query(`alter table assets add column if not exists primary_contract text;`);
+  await pool.query(`alter table assets add column if not exists coingecko_id text;`);
+  await pool.query(`alter table assets add column if not exists coinmarketcap_id text;`);
+  await pool.query(`alter table assets add column if not exists defillama_id text;`);
+  await pool.query(`alter table assets add column if not exists first_seen_source text;`);
+  await pool.query(`alter table assets add column if not exists first_seen_at timestamptz default now();`);
+  await pool.query(`alter table assets add column if not exists updated_at timestamptz default now();`);
+
+  await pool.query(`create table if not exists asset_contracts (
+    asset_id text not null,
+    chain text not null,
+    contract_address text not null,
+    source text,
+    primary boolean default false,
+    first_seen_at timestamptz default now(),
+    last_seen_at timestamptz default now(),
+    primary key (asset_id, chain, contract_address)
+  );`);
+
+  await pool.query(`create table if not exists asset_aliases (
+    asset_id text not null,
+    alias text not null,
+    kind text not null,
+    source text,
+    created_at timestamptz default now(),
+    primary key (asset_id, alias, kind)
+  );`);
+
+  await pool.query(`create table if not exists asset_sources (
+    asset_id text not null,
+    source text not null,
+    confidence int default 50,
+    metadata jsonb default '{}'::jsonb,
+    first_seen_at timestamptz default now(),
+    last_seen_at timestamptz default now(),
+    primary key (asset_id, source)
   );`);
 
   await pool.query(`create table if not exists markets (
     market_id text primary key,
-    base_asset_id text not null,
-    quote_asset_id text not null,
+    base_asset_id text,
+    quote_asset_id text,
     market_type text not null,
     venue text not null,
     venue_symbol text not null,
     status text not null,
-    metadata jsonb default '{}'::jsonb,
-    created_at timestamptz default now()
+    ws_capable boolean default false,
+    rest_capable boolean default true,
+    discovered_at timestamptz default now(),
+    updated_at timestamptz default now(),
+    metadata jsonb default '{}'::jsonb
   );`);
+
+  await pool.query(`alter table markets add column if not exists ws_capable boolean default false;`);
+  await pool.query(`alter table markets add column if not exists rest_capable boolean default true;`);
+  await pool.query(`alter table markets add column if not exists discovered_at timestamptz default now();`);
+  await pool.query(`alter table markets add column if not exists updated_at timestamptz default now();`);
+  await pool.query(`alter table markets add column if not exists metadata jsonb default '{}'::jsonb;`);
 
   await pool.query(`create table if not exists audit_events (
     id bigserial primary key,

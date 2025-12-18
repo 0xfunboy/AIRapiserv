@@ -219,17 +219,20 @@ export class MarketService {
     let pgMarkets = 0;
     let pgAudits = 0;
     let pgTokens = 0;
+    let pgContracts = 0;
     try {
-      const [assetsRes, marketsRes, auditsRes, tokensRes] = await Promise.all([
+      const [assetsRes, marketsRes, auditsRes, tokensRes, contractsRes] = await Promise.all([
         this.pg.query('select count(*) as count from assets'),
         this.pg.query('select count(*) as count from markets'),
         this.pg.query('select count(*) as count from audit_events'),
         this.pg.query('select count(*) as count from token_catalog'),
+        this.pg.query('select count(*) as count from asset_contracts'),
       ]);
       pgAssets = Number(assetsRes.rows?.[0]?.count ?? 0);
       pgMarkets = Number(marketsRes.rows?.[0]?.count ?? 0);
       pgAudits = Number(auditsRes.rows?.[0]?.count ?? 0);
       pgTokens = Number(tokensRes.rows?.[0]?.count ?? 0);
+      pgContracts = Number(contractsRes.rows?.[0]?.count ?? 0);
     } catch (err) {
       console.warn('Postgres status query failed', err);
     }
@@ -257,6 +260,7 @@ export class MarketService {
         assets: pgAssets,
         markets: pgMarkets,
         audits: pgAudits,
+        contracts: pgContracts,
         tokens: pgTokens,
       },
       activeMarkets: redisStats.markets,

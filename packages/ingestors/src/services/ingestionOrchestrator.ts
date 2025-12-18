@@ -1,6 +1,6 @@
 import pino from 'pino';
 import { MarketEvent, TradeEvent, CandleEvent } from '@airapiserv/core';
-import { CandleRepository, getRedisClient } from '@airapiserv/storage';
+import { CandleRepository, MarketRepository, getRedisClient } from '@airapiserv/storage';
 import { MarketConnector } from '../connectors/baseConnector.js';
 import { BinanceSpotConnector } from '../connectors/binanceConnector.js';
 import { BybitConnector } from '../connectors/bybitConnector.js';
@@ -11,6 +11,7 @@ export class IngestionOrchestrator {
   private readonly logger = pino({ name: 'ingestion-orchestrator' });
   private readonly redis = getRedisClient();
   private readonly candleRepo = new CandleRepository();
+  private readonly marketRepo = new MarketRepository();
   private readonly rollingCandles = new Map<string, CandleEvent>();
   private initialized = false;
 
@@ -70,6 +71,7 @@ export class IngestionOrchestrator {
   }
 
   private async handleEvent(event: MarketEvent) {
+    await this.upsertMarketCoverage(event.marketId);
     switch (event.kind) {
       case 'trade':
         await this.persistTrade(event);
@@ -130,6 +132,24 @@ export class IngestionOrchestrator {
           };
       this.rollingCandles.set(key, nextCandle);
       await this.candleRepo.upsert(nextCandle);
+    }
+  }
+
+  private async upsertMarketCoverage(marketId: string) {
+    try {
+      const [venue, symbol, marketType = 'spot'] = marketId.split(':');
+      await this.marketRepo.upsertMarket({
+        marketId,
+        venue: venue ?? 'unknown',
+        symbol: symbol ?? marketId,
+        marketType,
+        status: 'active',
+        wsCapable: true,
+        restCapable: true,
+        metadata: {},
+      });
+    } catch (err) {
+      this.logger.warn({ err, marketId }, 'failed to upsert market coverage');
     }
   }
 }
