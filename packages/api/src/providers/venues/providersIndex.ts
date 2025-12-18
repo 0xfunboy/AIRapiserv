@@ -3,6 +3,10 @@ import { BaseVenueProvider } from './baseVenueProvider.js';
 import { BinanceVenueProvider } from './binanceVenueProvider.js';
 import { BybitVenueProvider } from './bybitVenueProvider.js';
 import { OkxVenueProvider } from './okxVenueProvider.js';
+import { KrakenVenueProvider } from './krakenVenueProvider.js';
+import { CoinbaseVenueProvider } from './coinbaseVenueProvider.js';
+import { KucoinVenueProvider } from './kucoinVenueProvider.js';
+import { GateVenueProvider } from './gateVenueProvider.js';
 
 const VENUE_DEFS: Array<{ name: string; caps: VenueCapabilities }> = [
   { name: 'binance', caps: { hasSpot: true, hasPerp: true, wsTrades: true, wsKlines: true, restOhlcv: true } },
@@ -46,7 +50,11 @@ export const venueProvidersWithReal: VenueProvider[] = [
   new BinanceVenueProvider(),
   new BybitVenueProvider(),
   new OkxVenueProvider(),
-  ...VENUE_DEFS.filter((d) => !['binance', 'bybit', 'okx'].includes(d.name)).map(
+  new KrakenVenueProvider(),
+  new CoinbaseVenueProvider(),
+  new KucoinVenueProvider(),
+  new GateVenueProvider(),
+  ...VENUE_DEFS.filter((d) => !['binance', 'bybit', 'okx', 'kraken', 'coinbase', 'kucoin', 'gate'].includes(d.name)).map(
     (def) => new StubVenueProvider(def.name, def.caps)
   ),
 ];
