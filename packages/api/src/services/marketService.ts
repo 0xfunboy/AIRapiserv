@@ -279,7 +279,7 @@ export class MarketService {
   }
 
   async resetClickhouseCandles() {
-    await this.clickHouse.command({ query: 'DROP TABLE IF EXISTS candles_1s SETTINGS max_suspicious_broken_parts=5000' });
+    await this.clickHouse.command({ query: 'DROP TABLE IF EXISTS candles_1s SYNC' });
     await this.clickHouse.command({
       query: `create table if not exists candles_1s (
         start_ts DateTime,
