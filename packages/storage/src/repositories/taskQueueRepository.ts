@@ -45,6 +45,14 @@ export class TaskQueueRepository {
     return result.rows?.[0] ?? null;
   }
 
+  async hasHighPriorityPending(minPriority = 100) {
+    const res = await this.pg.query(
+      `select 1 from tasks where status = 'pending' and priority >= $1 limit 1`,
+      [minPriority]
+    );
+    return (res.rowCount ?? 0) > 0;
+  }
+
   async markDone(taskId: string) {
     await this.pg.query(`update tasks set status='done', updated_at=now() where task_id=$1`, [taskId]);
   }
