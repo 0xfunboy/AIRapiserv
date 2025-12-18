@@ -9,6 +9,10 @@ import { MarketService } from './services/marketService.js';
 import { TokenCatalogService } from './services/tokenCatalogService.js';
 import { registerV1Routes } from './routes/v1.js';
 import { registerWsGateway } from './ws/gateway.js';
+import { startIdleScheduler } from './services/idleScheduler.js';
+import { RequestMetricsRepository, TaskQueueRepository } from '@airapiserv/storage';
+import { DiscoveryService } from './services/discoveryService.js';
+import { VenueSyncService } from './services/venueSyncService.js';
 
 loadEnv();
 
@@ -16,6 +20,8 @@ const server = Fastify({ logger: true });
 const configService = new ConfigService();
 const marketService = new MarketService();
 const tokenCatalogService = new TokenCatalogService(server.log, configService);
+const metricsRepo = new RequestMetricsRepository();
+const taskQueue = new TaskQueueRepository();
 
 server.register(cors, {
   origin: (process.env.CORS_ORIGINS ?? '*').split(',').map((o) => o.trim()),
@@ -39,9 +45,23 @@ server.decorate('authenticate', async (request: any, reply: any) => {
   }
 });
 
+server.addHook('onRequest', async () => {
+  const now = new Date();
+  now.setSeconds(0, 0);
+  await metricsRepo.increment(now);
+});
+
 server.register(async (instance) => registerV1Routes(instance, { marketService, tokenCatalogService, configService }), { prefix: '/v1' });
 registerWsGateway(server, marketService);
 tokenCatalogService.start();
+
+// Seed queue with discovery and venue sync
+(async () => {
+  await taskQueue.enqueue({ type: 'DISCOVER_TOKENS_API', priority: 50 });
+  await taskQueue.enqueue({ type: 'SYNC_VENUE_MARKETS', priority: 40 });
+})();
+
+startIdleScheduler(server.log, { intervalMs: 5000, idleThreshold: Number(process.env.IDLE_REQUEST_THRESHOLD ?? 5) });
 
 const port = Number(process.env.API_PORT ?? 3333);
 server.listen({ port, host: '0.0.0.0' }).catch((err) => {
