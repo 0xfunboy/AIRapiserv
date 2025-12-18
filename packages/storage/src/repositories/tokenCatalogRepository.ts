@@ -16,29 +16,36 @@ export class TokenCatalogRepository {
   async upsertTokens(tokens: TokenCatalogEntry[]) {
     if (!tokens.length) return;
 
-    const tokenKeys = tokens.map((token) => token.tokenKey);
-    const symbols = tokens.map((token) => token.symbol);
-    const names = tokens.map((token) => token.name);
-    const chains = tokens.map((token) => token.chain);
-    const contracts = tokens.map((token) => token.contractAddress);
-    const sources = tokens.map((token) => token.sources);
-    const metadata = tokens.map((token) => token.metadata);
-
     const now = new Date();
+    const rows = tokens.map((token) => ({
+      token_key: token.tokenKey,
+      symbol: token.symbol,
+      name: token.name,
+      chain: token.chain,
+      contract_address: token.contractAddress,
+      sources: token.sources,
+      metadata: token.metadata,
+      updated_at: now,
+    }));
+
     await this.pg.query(
       `
-      insert into token_catalog (token_key, symbol, name, chain, contract_address, sources, metadata, updated_at)
-      select *
-      from unnest(
-        $1::text[],
-        $2::text[],
-        $3::text[],
-        $4::text[],
-        $5::text[],
-        $6::text[][],
-        $7::jsonb[],
-        $8::timestamptz[]
+      with data as (
+        select *
+        from jsonb_to_recordset($1::jsonb) as t(
+          token_key text,
+          symbol text,
+          name text,
+          chain text,
+          contract_address text,
+          sources text[],
+          metadata jsonb,
+          updated_at timestamptz
+        )
       )
+      insert into token_catalog (token_key, symbol, name, chain, contract_address, sources, metadata, updated_at)
+      select token_key, symbol, name, chain, contract_address, sources, metadata, updated_at
+      from data
       on conflict (token_key) do update set
         symbol = coalesce(excluded.symbol, token_catalog.symbol),
         name = coalesce(excluded.name, token_catalog.name),
@@ -52,7 +59,7 @@ export class TokenCatalogRepository {
         metadata = token_catalog.metadata || excluded.metadata,
         updated_at = now();
     `,
-      [tokenKeys, symbols, names, chains, contracts, sources, metadata, tokens.map(() => now)]
+      [JSON.stringify(rows)]
     );
   }
 

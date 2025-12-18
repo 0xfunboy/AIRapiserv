@@ -20,8 +20,16 @@ export class BybitVenueProvider extends BaseVenueProvider {
 
   private async fetchCategory(category: string, marketType: 'spot' | 'perp'): Promise<VenueMarket[]> {
     const url = `https://api.bybit.com/v5/market/instruments?category=${category}`;
-    const res = await fetch(url);
-    if (!res.ok) throw new Error(`bybit ${category} ${res.status}`);
+    let res: Response;
+    try {
+      res = await fetch(url);
+    } catch {
+      return [];
+    }
+    if (!res.ok) {
+      if (res.status === 404) return [];
+      throw new Error(`bybit ${category} ${res.status}`);
+    }
     const body = (await res.json()) as { result?: { list?: Array<{ symbol: string; baseCoin?: string; quoteCoin?: string }> } };
     return (body.result?.list ?? []).map((m) => ({
       venue: this.name,

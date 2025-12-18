@@ -6,7 +6,12 @@ export class MarketsCacheRepository {
 
   async upsertMarkets(venue: string, markets: VenueMarket[]) {
     if (!markets.length) return;
-    const rows = markets.map((m) => ({
+    const dedup = new Map<string, VenueMarket>();
+    for (const m of markets) {
+      // keep last occurrence, upstream ordering is fine
+      dedup.set(m.venueSymbol, m);
+    }
+    const rows = Array.from(dedup.values()).map((m) => ({
       venue,
       market_type: m.marketType,
       base_symbol: m.baseSymbol,

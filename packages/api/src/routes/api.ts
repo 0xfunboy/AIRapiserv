@@ -62,7 +62,15 @@ export async function registerApiRoutes(fastify: FastifyInstance) {
 
   fastify.post('/admin/tasks/trigger', async (request) => {
     const schema = z.object({
-      type: z.enum(['DISCOVER_TOKENS_API', 'SYNC_VENUE_MARKETS', 'RESOLVE_TOKEN_VENUES', 'INGEST_OHLCV_API', 'INGEST_OHLCV_WS', 'REVERIFY_API_ONLY']),
+      type: z.enum([
+        'DISCOVER_TOKENS_API',
+        'SYNC_VENUE_MARKETS',
+        'RESOLVE_TOKEN_VENUES',
+        'RESOLVE_TOKENS',
+        'INGEST_OHLCV_API',
+        'INGEST_OHLCV_WS',
+        'REVERIFY_API_ONLY',
+      ]),
       priority: z.coerce.number().optional(),
       payload: z.record(z.any()).optional(),
     });

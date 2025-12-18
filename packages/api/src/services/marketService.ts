@@ -203,6 +203,7 @@ export class MarketService {
 
     let clickhouseRows = 0;
     let clickhouseLatest: number | null = null;
+    let clickhouseNote: string | null = null;
     try {
       const result = await this.clickHouse.query({
         query: 'select count() as rows, max(start_ts) as latest from candles_1s',
@@ -215,6 +216,8 @@ export class MarketService {
       }
     } catch (err) {
       console.warn('ClickHouse status query failed', err);
+      clickhouseNote =
+        'ClickHouse candles table unavailable. Run POST /v1/maintenance/clickhouse/reset then /v1/maintenance/clickhouse/optimize.';
     }
 
     let pgAssets = 0;
@@ -257,6 +260,7 @@ export class MarketService {
         status: health.clickhouse,
         candlesRows: clickhouseRows,
         lastCandleTs: clickhouseLatest,
+        note: clickhouseNote,
       },
       postgres: {
         status: health.postgres,

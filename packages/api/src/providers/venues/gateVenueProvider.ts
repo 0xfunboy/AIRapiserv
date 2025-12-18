@@ -18,8 +18,13 @@ export class GateVenueProvider extends BaseVenueProvider {
 
   private async fetchSpot(): Promise<VenueMarket[]> {
     const url = 'https://api.gateio.ws/api/v4/spot/currency_pairs';
-    const res = await fetch(url);
-    if (!res.ok) throw new Error(`gate spot ${res.status}`);
+    let res: Response;
+    try {
+      res = await fetch(url);
+    } catch {
+      return [];
+    }
+    if (!res.ok) return [];
     const body = (await res.json()) as Array<{ id: string; base: string; quote: string; trade_status?: string }>;
     return (body ?? [])
       .filter((m) => (m.trade_status ?? '').toLowerCase() !== 'delist')
@@ -40,7 +45,12 @@ export class GateVenueProvider extends BaseVenueProvider {
   }
 
   private async safeFetchPerp(url: string): Promise<VenueMarket[]> {
-    const res = await fetch(url);
+    let res: Response;
+    try {
+      res = await fetch(url);
+    } catch {
+      return [];
+    }
     if (!res.ok) {
       return [];
     }
