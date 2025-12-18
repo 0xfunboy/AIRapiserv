@@ -60,6 +60,7 @@ tokenCatalogService.start();
 // Seed queue with discovery and venue sync
 (async () => {
   await taskQueue.enqueue({ type: 'DISCOVER_TOKENS_API', priority: 50 });
+  await taskQueue.enqueue({ type: 'RESOLVE_TOKENS', priority: 45 });
   await taskQueue.enqueue({ type: 'SYNC_VENUE_MARKETS', priority: 40 });
   await taskQueue.enqueue({ type: 'RESOLVE_TOKEN_VENUES', priority: 35 });
   // periodic maintenance placeholders

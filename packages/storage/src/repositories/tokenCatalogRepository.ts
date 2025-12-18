@@ -86,4 +86,31 @@ export class TokenCatalogRepository {
       lastUpdatedAt: result.rows?.[0]?.last_updated ? new Date(result.rows[0].last_updated).getTime() : null,
     };
   }
+
+  async listAll(limit = 50000) {
+    const res = await this.pg.query(
+      `select token_key as "tokenKey",
+              symbol,
+              name,
+              chain,
+              contract_address as "contractAddress",
+              sources,
+              metadata,
+              updated_at as "updatedAt"
+       from token_catalog
+       order by updated_at desc
+       limit $1`,
+      [limit]
+    );
+    return res.rows as Array<{
+      tokenKey: string;
+      symbol: string | null;
+      name: string | null;
+      chain: string | null;
+      contractAddress: string | null;
+      sources: string[];
+      metadata: Record<string, any>;
+      updatedAt: Date;
+    }>;
+  }
 }

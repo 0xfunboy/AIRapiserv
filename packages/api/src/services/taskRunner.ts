@@ -5,12 +5,14 @@ import { CoverageService } from './coverageService.js';
 import { TaskType } from './taskTypes.js';
 import { IngestionService } from './ingestionService.js';
 import { ReverifyService } from './reverifyService.js';
+import { TokenResolverService } from './tokenResolverService.js';
 
 const discovery = new DiscoveryService();
 const venueSync = new VenueSyncService();
 const coverage = new CoverageService();
 const ingestion = new IngestionService();
 const reverify = new ReverifyService();
+const resolver = new TokenResolverService();
 const queue = new TaskQueueRepository();
 
 const MINUTES = 60 * 1000;
@@ -23,6 +25,10 @@ export async function runNextTask() {
       case 'DISCOVER_TOKENS_API':
         await discovery.run();
         await queue.enqueue({ type: 'DISCOVER_TOKENS_API', priority: task.priority, runAfter: new Date(Date.now() + 24 * MINUTES * 60) });
+        break;
+      case 'RESOLVE_TOKENS':
+        await resolver.run();
+        await queue.enqueue({ type: 'RESOLVE_TOKENS', priority: task.priority, runAfter: new Date(Date.now() + 12 * MINUTES * 60) });
         break;
       case 'SYNC_VENUE_MARKETS':
         await venueSync.run();
