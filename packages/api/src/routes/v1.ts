@@ -128,6 +128,16 @@ export async function registerV1Routes(
     return { ...status, tokens: tokenStats };
   });
 
+  fastify.post('/maintenance/clickhouse/optimize', async () => {
+    await marketService.optimizeClickhouse();
+    return { status: 'ok' };
+  });
+
+  fastify.post('/maintenance/clickhouse/reset', async () => {
+    await marketService.resetClickhouseCandles();
+    return { status: 'ok' };
+  });
+
   fastify.post('/admin/tasks/trigger', async (request) => {
     const body = (request.body as any) ?? {};
     const type = body.type as string;

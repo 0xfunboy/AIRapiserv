@@ -198,6 +198,8 @@ export class MarketService {
     const health = await this.getHealth();
     const redisKeys = await this.redis.dbsize();
     const redisStats = await this.getActiveMarkets();
+    const now = Date.now();
+    const lagMs = redisStats.lastTickerTs ? now - redisStats.lastTickerTs : null;
 
     let clickhouseRows = 0;
     let clickhouseLatest: number | null = null;
@@ -249,6 +251,7 @@ export class MarketService {
         activeSymbols: redisStats.activeSymbolCount,
         lastTickerTs: redisStats.lastTickerTs || null,
         lastTradeTs: redisStats.lastTradeTs || null,
+        lagMs,
       },
       clickhouse: {
         status: health.clickhouse,
@@ -265,6 +268,29 @@ export class MarketService {
       },
       activeMarkets: redisStats.markets,
     };
+  }
+
+  async optimizeClickhouse() {
+    await this.clickHouse.command({ query: 'OPTIMIZE TABLE candles_1s FINAL;' });
+  }
+
+  async resetClickhouseCandles() {
+    await this.clickHouse.command({ query: 'DROP TABLE IF EXISTS candles_1s' });
+    await this.clickHouse.command({
+      query: `create table if not exists candles_1s (
+        start_ts DateTime,
+        interval_ms UInt32,
+        market_id String,
+        open Float64,
+        high Float64,
+        low Float64,
+        close Float64,
+        volume Float64,
+        trades_count UInt32,
+        is_final UInt8
+      ) engine = MergeTree()
+      order by (market_id, start_ts);`,
+    });
   }
 
   async getHealth() {

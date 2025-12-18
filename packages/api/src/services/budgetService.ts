@@ -8,6 +8,8 @@ const DEFAULT_BUDGETS: Record<string, number> = {
   codex: 5000,
 };
 
+const PROVIDERS = Object.keys(DEFAULT_BUDGETS);
+
 export class BudgetService {
   private readonly redis = getRedisClient();
 
@@ -36,5 +38,16 @@ export class BudgetService {
     const ttl = 60 * 60 * 24; // 1 day
     await this.redis.incrby(key, cost);
     await this.redis.expire(key, ttl);
+  }
+
+  async getUsage() {
+    const today = new Date().toISOString().slice(0, 10);
+    const usage: Record<string, { used: number; limit: number }> = {};
+    for (const provider of PROVIDERS) {
+      const limit = this.limitFor(provider);
+      const current = Number((await this.redis.get(this.key(provider))) ?? 0);
+      usage[provider] = { used: current, limit };
+    }
+    return { date: today, usage };
   }
 }

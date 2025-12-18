@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { ActionButton } from './ActionButton';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? 'http://localhost:3333';
 
@@ -26,15 +27,20 @@ export function AdminClient() {
   const [values, setValues] = useState<ConfigValues>({});
   const [keysPresent, setKeysPresent] = useState<Record<string, boolean>>({});
   const [status, setStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+  const [budget, setBudget] = useState<{ date: string; usage: Record<string, { used: number; limit: number }> } | null>(null);
 
   useEffect(() => {
     const load = async () => {
       try {
-        const res = await fetch(`${API_BASE}/v1/config`);
-        if (!res.ok) return;
-        const data = await res.json();
-        setValues(data.values ?? {});
-        setKeysPresent(data.keysPresent ?? {});
+        const [cfgRes, budgetRes] = await Promise.all([fetch(`${API_BASE}/v1/config`), fetch(`${API_BASE}/api/admin/budget`)]);
+        if (cfgRes.ok) {
+          const data = await cfgRes.json();
+          setValues(data.values ?? {});
+          setKeysPresent(data.keysPresent ?? {});
+        }
+        if (budgetRes.ok) {
+          setBudget(await budgetRes.json());
+        }
       } catch (err) {
         console.error(err);
       }
@@ -69,6 +75,33 @@ export function AdminClient() {
 
   return (
     <div className="space-y-6">
+      <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 space-y-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <h3 className="text-lg font-semibold">Maintenance</h3>
+            <p className="text-xs text-slate-400">ClickHouse health & budget overview.</p>
+          </div>
+          <div className="flex gap-2">
+            <ActionButton label="Optimize ClickHouse" taskType="SYNC_VENUE_MARKETS" payload={{ maintenance: 'optimize_ch' }} variant="ghost" />
+          </div>
+        </div>
+        {budget && (
+          <div className="grid gap-3 md:grid-cols-3 text-xs">
+            {Object.entries(budget.usage).map(([provider, info]) => (
+              <div key={provider} className="border border-slate-800 rounded-lg p-3 bg-slate-950">
+                <div className="flex items-center justify-between">
+                  <span className="font-semibold uppercase">{provider}</span>
+                  <span className="text-slate-500">{budget.date}</span>
+                </div>
+                <p className="text-slate-300">
+                  Used {info.used} / {info.limit}
+                </p>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
       <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 space-y-4 text-sm">
         <div>
           <h3 className="text-lg font-semibold">Runtime configuration</h3>

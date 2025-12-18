@@ -3,10 +3,12 @@ import { z } from 'zod';
 import { TokenDirectoryService } from '../services/tokenDirectoryService.js';
 import { TaskQueueRepository } from '@airapiserv/storage';
 import { TaskType } from '../services/taskTypes.js';
+import { BudgetService } from '../services/budgetService.js';
 
 export async function registerApiRoutes(fastify: FastifyInstance) {
   const tokens = new TokenDirectoryService(fastify.log);
   const tasks = new TaskQueueRepository();
+  const budget = new BudgetService();
 
   fastify.get('/tokens/search', async (request) => {
     const schema = z.object({ q: z.string(), limit: z.coerce.number().min(1).max(200).optional() });
@@ -67,5 +69,9 @@ export async function registerApiRoutes(fastify: FastifyInstance) {
     const body = schema.parse(request.body);
     const id = await tasks.enqueue({ type: body.type as TaskType, priority: body.priority, payload: body.payload });
     return { enqueued: true, taskId: id };
+  });
+
+  fastify.get('/admin/budget', async () => {
+    return budget.getUsage();
   });
 }
