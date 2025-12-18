@@ -13,6 +13,8 @@ const ingestion = new IngestionService();
 const reverify = new ReverifyService();
 const queue = new TaskQueueRepository();
 
+const MINUTES = 60 * 1000;
+
 export async function runNextTask() {
   const task = await queue.fetchNext();
   if (!task) return null;
@@ -20,12 +22,15 @@ export async function runNextTask() {
     switch (task.type as TaskType) {
       case 'DISCOVER_TOKENS_API':
         await discovery.run();
+        await queue.enqueue({ type: 'DISCOVER_TOKENS_API', priority: task.priority, runAfter: new Date(Date.now() + 24 * MINUTES * 60) });
         break;
       case 'SYNC_VENUE_MARKETS':
         await venueSync.run();
+        await queue.enqueue({ type: 'SYNC_VENUE_MARKETS', priority: task.priority, runAfter: new Date(Date.now() + 60 * MINUTES) });
         break;
       case 'RESOLVE_TOKEN_VENUES':
         await coverage.run();
+        await queue.enqueue({ type: 'RESOLVE_TOKEN_VENUES', priority: task.priority, runAfter: new Date(Date.now() + 30 * MINUTES) });
         break;
       case 'INGEST_OHLCV_API':
         await ingestion.ingestOhlcvApi((task.payload as any) ?? {});
