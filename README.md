@@ -110,11 +110,12 @@ Additional documentation lives in `docs/`:
 
 - Unified data model and shared types
 - Symbol resolver with contract-address overrides and manual mappings
-- First WebSocket connectors (Binance, Bybit) and throttled REST fallback (CoinGecko, CryptoCompare)
+- WebSocket connectors (Binance, Bybit, OKX, Coinbase, Bitfinex) + throttled REST fallback (CoinGecko, CryptoCompare)
+- Rolling candles 1s/5s/1m with dual storage (ClickHouse + Postgres)
 - REST/WS API exposing the AIRTrack contract
-- WebGUI with dashboard, assets, markets, charts, compare and admin placeholders
+- WebGUI (dashboard/status/tokens/markets/charts/compare/admin) con backfill e quick-actions
 - Operational docs for AIRTrack compatibility
-- Token catalog aggregation (CoinGecko/CoinMarketCap/CryptoCompare/DexScreener) with 30m refresh + manual refresh button
+- Token catalog aggregation (CoinGecko/CoinMarketCap/CryptoCompare/DexScreener/DEXTools/Codex) con budget giornalieri e refresh 30m + refresh manuale
 
 ### Setup wizard (local or external DBs)
 
@@ -140,6 +141,7 @@ curl -X POST http://localhost:3333/v1/tokens/refresh
 Optional sources:
 - CoinGecko, CoinMarketCap, CryptoCompare, DexScreener (enabled automatically if keys are present).
 - DEXTools/Codex can be added by setting `DEXTOOLS_TOKEN_LIST_URL` / `CODEX_TOKEN_LIST_URL` in `.env`.
+- Budget limits are enforced per day (Redis): override with `COINGECKO_BUDGET_DAILY`, `COINMARKETCAP_BUDGET_DAILY`, etc. The Admin page shows current usage.
 
 All discoveries are persisted in Postgres (`assets`, `asset_contracts`, `asset_aliases`, `asset_sources`, `token_catalog`) and never deleted automatically. Each refresh upserts records, preserving history and first-seen metadata. The WebGUI exposes the catalog and per-token drilldown pages under `/tokens`.
 
@@ -203,6 +205,36 @@ redis-cli ping
 curl -s http://127.0.0.1:8123/ping
 sudo -u postgres psql -c "select 1;"
 ```
+
+### ClickHouse maintenance
+
+- Optimize parts:
+
+```bash
+curl -X POST http://localhost:3333/v1/maintenance/clickhouse/optimize
+```
+
+- Reset candles table (drops/recreates `candles_1s`):
+
+```bash
+curl -X POST http://localhost:3333/v1/maintenance/clickhouse/reset
+```
+
+You can also trigger these from the WebGUI Admin page.
+
+### WebGUI tips
+
+- **Status**: DB health, ingestion lag, active markets, quick actions (discover/resolve/sync/reverify).
+- **Tokens**: search by ticker/name/contract; click to drill down; “Force backfill” triggers OHLCV ingestion.
+- **Compare**: filter token, view venue spreads and deltas.
+- **Admin**: view/update runtime overrides, directory budgets, ClickHouse maintenance.
+
+### What to do if ingestion looks stale
+
+1. Check Status: “Latest Tick” lag and active markets.
+2. Run quick actions: “Sync venues” then “Resolve coverage”.
+3. Force backfill for the token from its detail page.
+4. If ClickHouse errors persist, run the maintenance optimize/reset commands above.
 
 ### Postgres credential reset
 
