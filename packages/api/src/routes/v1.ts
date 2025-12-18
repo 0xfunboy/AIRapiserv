@@ -3,12 +3,18 @@ import { z } from 'zod';
 import { MarketService } from '../services/marketService.js';
 import { TokenCatalogService } from '../services/tokenCatalogService.js';
 import { ConfigService } from '../services/configService.js';
+import { DiscoveryService } from '../services/discoveryService.js';
+import { VenueSyncService } from '../services/venueSyncService.js';
+import { TaskQueueRepository } from '@airapiserv/storage';
 
 export async function registerV1Routes(
   fastify: FastifyInstance,
   opts: { marketService: MarketService; tokenCatalogService: TokenCatalogService; configService: ConfigService }
 ) {
   const { marketService, tokenCatalogService, configService } = opts;
+  const discovery = new DiscoveryService(fastify.log);
+  const venueSync = new VenueSyncService(fastify.log);
+  const tasks = new TaskQueueRepository();
 
   fastify.get('/resolve', async (request, reply) => {
     const schema = z.object({
@@ -120,6 +126,24 @@ export async function registerV1Routes(
     const status = await marketService.getStatus();
     const tokenStats = await tokenCatalogService.getStats();
     return { ...status, tokens: tokenStats };
+  });
+
+  fastify.post('/admin/tasks/trigger', async (request) => {
+    const body = (request.body as any) ?? {};
+    const type = body.type as string;
+    if (type === 'DISCOVER_TOKENS_API') {
+      await discovery.run();
+      return { status: 'ok' };
+    }
+    if (type === 'SYNC_VENUE_MARKETS') {
+      await venueSync.run();
+      return { status: 'ok' };
+    }
+    if (type) {
+      await tasks.enqueue({ type, priority: 50 });
+      return { status: 'queued', type };
+    }
+    return { status: 'noop' };
   });
 
   fastify.get('/health', async () => {

@@ -133,6 +133,16 @@ async function migratePostgres() {
     primary key (token_id, venue, market_type, venue_symbol)
   );`);
 
+  await pool.query(`create table if not exists markets_cache (
+    venue text not null,
+    market_type text not null,
+    base_symbol text,
+    quote_symbol text,
+    venue_symbol text not null,
+    updated_at timestamptz default now(),
+    primary key (venue, venue_symbol)
+  );`);
+
   await pool.query(`create table if not exists candles (
     token_id uuid not null references tokens(token_id) on delete cascade,
     venue text not null,

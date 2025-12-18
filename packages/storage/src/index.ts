@@ -8,3 +8,4 @@ export * from './repositories/marketRepository.js';
 export * from './repositories/tokenRepository.js';
 export * from './repositories/taskQueueRepository.js';
 export * from './repositories/requestMetricsRepository.js';
+export * from './repositories/marketsCacheRepository.js';
