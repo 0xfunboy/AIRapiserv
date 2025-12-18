@@ -1,6 +1,7 @@
 import { TokenCatalogRepository, AssetCatalogRepository } from '@airapiserv/storage';
 import { loadEnv } from '../config/loadEnv.js';
 import { ConfigService } from './configService.js';
+import { BudgetService } from './budgetService.js';
 
 type TokenRecord = {
   tokenKey: string;
@@ -27,6 +28,7 @@ export class TokenCatalogService {
   private readonly assetRepo = new AssetCatalogRepository();
   private readonly logger: { info: (...args: any[]) => void; warn: (...args: any[]) => void; error: (...args: any[]) => void };
   private readonly configService?: ConfigService;
+  private readonly budget = new BudgetService();
   private lastRefreshAt = 0;
   private lastStats: RefreshResult | null = null;
   private inFlight?: Promise<RefreshResult>;
@@ -253,6 +255,10 @@ export class TokenCatalogService {
   }
 
   private async fetchCoinGecko() {
+    if (!(await this.budget.canSpend('coingecko'))) {
+      this.logger.warn({ source: 'coingecko' }, 'budget exceeded, skipping fetch');
+      return null;
+    }
     const apiKey = process.env.COINGECKO_API_KEY ?? '';
     const headers = apiKey ? { 'x-cg-pro-api-key': apiKey } : undefined;
     const url = 'https://api.coingecko.com/api/v3/coins/list?include_platform=true';
@@ -303,6 +309,7 @@ export class TokenCatalogService {
         }
       }
       this.logFetchResult('coingecko', tokens.length, startedAt);
+      await this.budget.consume('coingecko');
       return { source: 'coingecko', tokens };
     } catch (err) {
       this.logger.warn({ err }, 'CoinGecko token list failed');
@@ -313,6 +320,10 @@ export class TokenCatalogService {
   private async fetchCoinMarketCap() {
     const apiKey = process.env.COINMARKETCAP_API_KEY ?? '';
     if (!apiKey) return null;
+    if (!(await this.budget.canSpend('coinmarketcap'))) {
+      this.logger.warn({ source: 'coinmarketcap' }, 'budget exceeded, skipping fetch');
+      return null;
+    }
     const url = 'https://pro-api.coinmarketcap.com/v1/cryptocurrency/map?limit=5000';
     const startedAt = Date.now();
     this.logFetchStart('coinmarketcap', url);
@@ -340,6 +351,7 @@ export class TokenCatalogService {
 
       const filtered = tokens.filter((token) => token.tokenKey);
       this.logFetchResult('coinmarketcap', filtered.length, startedAt);
+      await this.budget.consume('coinmarketcap');
       return { source: 'coinmarketcap', tokens: filtered };
     } catch (err) {
       this.logger.warn({ err }, 'CoinMarketCap token list failed');
@@ -349,6 +361,10 @@ export class TokenCatalogService {
 
   private async fetchCryptoCompare() {
     const apiKey = process.env.CRYPTOCOMPARE_API_KEY ?? '';
+    if (!(await this.budget.canSpend('cryptocompare'))) {
+      this.logger.warn({ source: 'cryptocompare' }, 'budget exceeded, skipping fetch');
+      return null;
+    }
     const url = 'https://min-api.cryptocompare.com/data/all/coinlist';
     const startedAt = Date.now();
     this.logFetchStart('cryptocompare', url);
@@ -374,6 +390,7 @@ export class TokenCatalogService {
 
       const filtered = tokens.filter((token) => token.tokenKey);
       this.logFetchResult('cryptocompare', filtered.length, startedAt);
+      await this.budget.consume('cryptocompare');
       return { source: 'cryptocompare', tokens: filtered };
     } catch (err) {
       this.logger.warn({ err }, 'CryptoCompare token list failed');
@@ -382,6 +399,10 @@ export class TokenCatalogService {
   }
 
   private async fetchDexScreener() {
+    if (!(await this.budget.canSpend('dexscreener'))) {
+      this.logger.warn({ source: 'dexscreener' }, 'budget exceeded, skipping fetch');
+      return null;
+    }
     const baseUrl = process.env.DEXSCREENER_BASE_URL ?? 'https://api.dexscreener.io';
     const url = `${baseUrl}/token-profiles/latest/v1`;
     const startedAt = Date.now();
@@ -409,6 +430,7 @@ export class TokenCatalogService {
       });
       const filtered = tokens.filter((token) => token.tokenKey);
       this.logFetchResult('dexscreener', filtered.length, startedAt);
+      await this.budget.consume('dexscreener');
       return { source: 'dexscreener', tokens: filtered };
     } catch (err) {
       this.logger.warn({ err }, 'DexScreener token list failed');
@@ -420,6 +442,10 @@ export class TokenCatalogService {
     const url = process.env.DEXTOOLS_TOKEN_LIST_URL ?? '';
     if (!url) return null;
     const apiKey = process.env.DEXTOOLS_API_KEY ?? '';
+    if (!(await this.budget.canSpend('dextools'))) {
+      this.logger.warn({ source: 'dextools' }, 'budget exceeded, skipping fetch');
+      return null;
+    }
     return this.fetchCustomTokenList('dextools', url, apiKey);
   }
 
@@ -427,6 +453,10 @@ export class TokenCatalogService {
     const url = process.env.CODEX_TOKEN_LIST_URL ?? '';
     if (!url) return null;
     const apiKey = process.env.CODEX_API_KEY ?? '';
+    if (!(await this.budget.canSpend('codex'))) {
+      this.logger.warn({ source: 'codex' }, 'budget exceeded, skipping fetch');
+      return null;
+    }
     return this.fetchCustomTokenList('codex', url, apiKey);
   }
 
