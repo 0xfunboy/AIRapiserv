@@ -29,6 +29,8 @@ export default async function StatusPage() {
   const postgres = status?.postgres ?? {};
   const activeMarkets = status?.activeMarkets ?? [];
   const tokens = status?.tokens ?? {};
+  const lagMs = status?.redis?.lagMs ?? null;
+  const lagText = lagMs != null ? `${(lagMs / 1000).toFixed(1)}s` : 'n/a';
 
   return (
     <section className="space-y-8">
@@ -65,7 +67,7 @@ export default async function StatusPage() {
       <div className="grid gap-4 md:grid-cols-3">
         <StatCard title="Active Markets" value={`${redis.activeMarkets ?? 0}`} subtitle="From Redis tickers/trades" />
         <StatCard title="Active Symbols" value={`${redis.activeSymbols ?? 0}`} subtitle="Unique symbols live" />
-        <StatCard title="Latest Tick" value={formatTs(redis.lastTickerTs ?? null)} subtitle="Last ticker update" />
+        <StatCard title="Latest Tick" value={formatTs(redis.lastTickerTs ?? null)} subtitle={`Lag ${lagText}`} />
       </div>
 
       <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 space-y-4">

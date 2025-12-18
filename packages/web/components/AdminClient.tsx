@@ -28,6 +28,7 @@ export function AdminClient() {
   const [keysPresent, setKeysPresent] = useState<Record<string, boolean>>({});
   const [status, setStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [budget, setBudget] = useState<{ date: string; usage: Record<string, { used: number; limit: number }> } | null>(null);
+  const [maintenanceMsg, setMaintenanceMsg] = useState('');
 
   useEffect(() => {
     const load = async () => {
@@ -73,6 +74,19 @@ export function AdminClient() {
     }
   };
 
+  const runMaintenance = async (path: 'optimize' | 'reset') => {
+    setMaintenanceMsg('Working...');
+    try {
+      const res = await fetch(`${API_BASE}/v1/maintenance/clickhouse/${path}`, { method: 'POST' });
+      if (!res.ok) throw new Error(await res.text());
+      setMaintenanceMsg(path === 'optimize' ? 'Optimize requested' : 'Table reset ok');
+    } catch (err: any) {
+      setMaintenanceMsg(err?.message ?? 'Failed');
+    } finally {
+      setTimeout(() => setMaintenanceMsg(''), 2000);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 space-y-4">
@@ -81,10 +95,22 @@ export function AdminClient() {
             <h3 className="text-lg font-semibold">Maintenance</h3>
             <p className="text-xs text-slate-400">ClickHouse health & budget overview.</p>
           </div>
-          <div className="flex gap-2">
-            <ActionButton label="Optimize ClickHouse" taskType="SYNC_VENUE_MARKETS" payload={{ maintenance: 'optimize_ch' }} variant="ghost" />
+          <div className="flex gap-2 text-xs">
+            <button
+              onClick={() => runMaintenance('optimize')}
+              className="rounded-lg bg-slate-800 border border-slate-700 px-3 py-2 hover:bg-slate-700"
+            >
+              Optimize ClickHouse
+            </button>
+            <button
+              onClick={() => runMaintenance('reset')}
+              className="rounded-lg bg-rose-500 text-slate-900 px-3 py-2 hover:bg-rose-400"
+            >
+              Reset candles table
+            </button>
           </div>
         </div>
+        {maintenanceMsg && <p className="text-[11px] text-emerald-300">{maintenanceMsg}</p>}
         {budget && (
           <div className="grid gap-3 md:grid-cols-3 text-xs">
             {Object.entries(budget.usage).map(([provider, info]) => (
