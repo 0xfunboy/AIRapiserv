@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { CandlesChart } from '../../../components/CandlesChart';
+import { BackfillButton } from '../../../components/BackfillButton';
 
 export const dynamic = 'force-dynamic';
 
@@ -139,7 +140,10 @@ export default async function TokenDetailPage({ params }: { params: { tokenKey: 
       <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 space-y-3">
         <div className="flex items-center justify-between">
           <h3 className="text-lg font-semibold">OHLCV (1m)</h3>
-          <span className="text-xs text-slate-500">Source: Postgres candles</span>
+          <div className="flex items-center gap-3">
+            <BackfillButton tokenId={params.tokenKey} timeframe="1m" label="Force backfill" />
+            <span className="text-xs text-slate-500">Source: Postgres candles + live WS</span>
+          </div>
         </div>
         <CandlesChart candles={candles} />
       </div>

@@ -1,5 +1,6 @@
 import { StatCard } from '../../components/StatCard';
 import { TokenRefreshButton } from '../../components/TokenRefreshButton';
+import { ActionButton } from '../../components/ActionButton';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? 'http://localhost:3333';
 
@@ -65,6 +66,26 @@ export default async function StatusPage() {
         <StatCard title="Active Markets" value={`${redis.activeMarkets ?? 0}`} subtitle="From Redis tickers/trades" />
         <StatCard title="Active Symbols" value={`${redis.activeSymbols ?? 0}`} subtitle="Unique symbols live" />
         <StatCard title="Latest Tick" value={formatTs(redis.lastTickerTs ?? null)} subtitle="Last ticker update" />
+      </div>
+
+      <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 space-y-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <h3 className="text-lg font-semibold">Quick actions</h3>
+            <p className="text-xs text-slate-400">Trigger maintenance and backfill without shell access.</p>
+          </div>
+          <TokenRefreshButton />
+        </div>
+        <div className="grid gap-3 md:grid-cols-3">
+          <ActionButton label="Discover tokens" taskType="DISCOVER_TOKENS_API" />
+          <ActionButton label="Resolve tokens" taskType="RESOLVE_TOKENS" />
+          <ActionButton label="Sync venues" taskType="SYNC_VENUE_MARKETS" />
+          <ActionButton label="Resolve coverage" taskType="RESOLVE_TOKEN_VENUES" />
+          <ActionButton label="Reverify API-only" taskType="REVERIFY_API_ONLY" />
+        </div>
+        <p className="text-[11px] text-slate-500">
+          Tip: run “Resolve tokens” after a discovery to merge chain/CA and provider IDs, then “Resolve coverage” to map live markets.
+        </p>
       </div>
 
       <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 space-y-4">
