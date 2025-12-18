@@ -6,6 +6,7 @@ import { BinanceSpotConnector } from '../connectors/binanceConnector.js';
 import { BybitConnector } from '../connectors/bybitConnector.js';
 import { CoinGeckoFallbackConnector, CryptoCompareFallbackConnector } from '../connectors/fallbackRest.js';
 import { OkxConnector } from '../connectors/okxConnector.js';
+import { CoinbaseConnector } from '../connectors/coinbaseConnector.js';
 
 export class IngestionOrchestrator {
   private readonly connectors: MarketConnector[] = [];
@@ -54,6 +55,7 @@ export class IngestionOrchestrator {
     this.registerConnector(new BinanceSpotConnector());
     this.registerConnector(new BybitConnector());
     this.registerConnector(new OkxConnector());
+    this.registerConnector(new CoinbaseConnector());
 
     if (process.env.ENABLE_COINGECKO_FALLBACK !== 'false') {
       this.registerConnector(new CoinGeckoFallbackConnector());
