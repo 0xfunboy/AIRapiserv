@@ -3,20 +3,22 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
   Chart as ChartJS,
-  CategoryScale,
+  TimeScale,
   LinearScale,
-  PointElement,
-  LineElement,
   Tooltip,
   Legend,
+  ChartData,
+  ChartOptions,
 } from 'chart.js';
-import { Line } from 'react-chartjs-2';
+import { CandlestickController, CandlestickElement } from 'chartjs-chart-financial';
+import 'chartjs-adapter-date-fns';
+import { Chart } from 'react-chartjs-2';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? 'http://localhost:3333';
 
 const intervals = ['1s', '5s', '1m', '5m'] as const;
 
-ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Tooltip, Legend);
+ChartJS.register(TimeScale, LinearScale, CandlestickController, CandlestickElement, Tooltip, Legend);
 
 export function ChartsClient() {
   const [markets, setMarkets] = useState<any[]>([]);
@@ -97,20 +99,41 @@ export function ChartsClient() {
 }
 
 function ChartPreview({ candles }: { candles: any[] }) {
-  const data = useMemo(() => {
+  const { data, options } = useMemo(() => {
     const ordered = [...candles].reverse();
-    return {
-      labels: ordered.map((candle) => new Date(candle.startTs).toLocaleTimeString()),
+    const chartData: ChartData<'candlestick'> = {
       datasets: [
         {
-          label: 'Close',
-          data: ordered.map((candle) => candle.close),
+          label: 'OHLC',
+          data: ordered.map((candle) => ({
+            x: candle.startTs,
+            o: candle.open,
+            h: candle.high,
+            l: candle.low,
+            c: candle.close,
+          })),
           borderColor: '#10b981',
           backgroundColor: 'rgba(16, 185, 129, 0.2)',
-          tension: 0.25,
         },
       ],
     };
+    const chartOptions: ChartOptions<'candlestick'> = {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: { mode: 'index', intersect: false },
+      },
+      scales: {
+        x: {
+          type: 'time',
+          time: { unit: 'minute', displayFormats: { second: 'HH:mm:ss', minute: 'HH:mm' } },
+          ticks: { color: '#94a3b8', autoSkip: true },
+        },
+        y: { ticks: { color: '#94a3b8' } },
+      },
+    };
+    return { data: chartData, options: chartOptions };
   }, [candles]);
 
   if (!candles.length) {
@@ -120,20 +143,7 @@ function ChartPreview({ candles }: { candles: any[] }) {
   return (
     <div className="space-y-4">
       <div className="h-64">
-        <Line
-          data={data}
-          options={{
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: {
-              legend: { display: false },
-            },
-            scales: {
-              x: { ticks: { color: '#94a3b8' } },
-              y: { ticks: { color: '#94a3b8' } },
-            },
-          }}
-        />
+        <Chart type="candlestick" data={data} options={options} />
       </div>
       <div className="grid gap-3 md:grid-cols-2 text-sm">
         {candles.slice(0, 12).map((candle) => (

@@ -9,6 +9,11 @@ export class CoinMarketCapProvider extends BaseDirectoryProvider {
     if (!apiKey) return [];
     const url = 'https://pro-api.coinmarketcap.com/v1/cryptocurrency/map?limit=5000';
     const res = await fetch(url, { headers: { 'X-CMC_PRO_API_KEY': apiKey } });
+    if (res.status === 401 || res.status === 429) {
+      // rate limit or bad key: degrade gracefully
+      console.warn(`CMC request skipped (${res.status})`);
+      return [];
+    }
     if (!res.ok) throw new Error(`CMC error ${res.status}`);
     const body = (await res.json()) as { data: Array<{ id: number; symbol: string; name: string; platform?: { name: string; token_address: string } }> };
     return body.data.map((row) => ({
