@@ -11,6 +11,7 @@ const navItems = [
   { href: '/markets', label: 'Markets' },
   { href: '/charts', label: 'Charts' },
   { href: '/compare', label: 'Compare' },
+  { href: '/token', label: 'Token Terminal' },
   { href: '/admin', label: 'Admin' },
 ];
 
