@@ -169,7 +169,7 @@ async function migratePostgres() {
     created_at timestamptz default now(),
     updated_at timestamptz default now()
   );`);
-  await pool.query(`create index if not exists idx_tasks_status_priority on tasks(status, priority desc, coalesce(run_after, now()));`);
+  await pool.query(`create index if not exists idx_tasks_status_priority on tasks(status, priority desc, coalesce(run_after, to_timestamp(0)));`);
 
   await pool.query(`create table if not exists request_metrics (
     bucket_start timestamptz primary key,
