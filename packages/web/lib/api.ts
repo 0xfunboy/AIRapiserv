@@ -65,3 +65,55 @@ export async function getTokenMarkets(apiBaseUrl: string | undefined, tokenId: s
     signal
   );
 }
+
+export type TokenSearchItem = {
+  tokenId: string;
+  symbol: string;
+  name?: string;
+  chain?: string;
+  contractAddress?: string;
+  logo?: string;
+  confidence?: number;
+  source?: string;
+};
+
+export async function searchTokens(apiBaseUrl: string, q: string, limit = 50, signal?: AbortSignal) {
+  const res = await fetchJson<{ items?: TokenSearchItem[] } | TokenSearchItem[]>(`${apiBaseUrl}/api/tokens/search?q=${encodeURIComponent(q)}&limit=${limit}`, signal);
+  if (!res) return { items: [] as TokenSearchItem[] };
+  if (Array.isArray(res)) return { items: res };
+  return { items: res.items ?? [] };
+}
+
+export async function getTokenVenues(apiBaseUrl: string, tokenId: string, signal?: AbortSignal) {
+  return fetchJson<any[]>(`${apiBaseUrl}/api/tokens/${encodeURIComponent(tokenId)}/venues`, signal);
+}
+
+export async function getTokenOhlcvByToken(apiBaseUrl: string, tokenId: string, timeframe: string, limit = 600, signal?: AbortSignal) {
+  const res = await fetchJson<{ candles?: any[] }>(
+    `${apiBaseUrl}/api/tokens/${encodeURIComponent(tokenId)}/ohlcv?timeframe=${encodeURIComponent(timeframe)}&limit=${limit}`,
+    signal
+  );
+  return res ?? null;
+}
+
+export function pickBestMarketIdFromVenues(venues: any[]): string | null {
+  if (!Array.isArray(venues)) return null;
+  const prefQuotes = ['USDT', 'USDC', 'USD'];
+  const scored = venues
+    .filter((v) => v?.marketId)
+    .map((v) => {
+      const quote = (v.quote ?? v.pair?.split('/')?.[1] ?? '').toUpperCase();
+      const isPreferredQuote = prefQuotes.includes(quote);
+      const liq = v.liquidityScore ?? 0;
+      const vol = v.volume24h ?? 0;
+      const isSpot = (v.marketType ?? '').toLowerCase() !== 'perp';
+      return { v, score: (isPreferredQuote ? 10 : 0) + (isSpot ? 5 : 0) + liq + vol / 1e6 };
+    });
+  if (!scored.length) return null;
+  scored.sort((a, b) => b.score - a.score);
+  return scored[0].v.marketId ?? null;
+}
+
+export async function getMarketPrice(apiBaseUrl: string, marketId: string, signal?: AbortSignal) {
+  return fetchJson<any>(`${apiBaseUrl}/v1/price?marketId=${encodeURIComponent(marketId)}`, signal);
+}

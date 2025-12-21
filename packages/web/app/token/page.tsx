@@ -7,18 +7,23 @@ import { TokenPriceCard } from '../../components/tokenTerminal/TokenPriceCard';
 import { TokenStatsGrid } from '../../components/tokenTerminal/TokenStatsGrid';
 import { TokenRealtimeChart } from '../../components/tokenTerminal/TokenRealtimeChart';
 import { TokenMarketsTable } from '../../components/tokenTerminal/TokenMarketsTable';
-import { getTokenMarkets, getTokenSeries, getTokenSummary } from '../../lib/api';
-
-type Summary = Awaited<ReturnType<typeof getTokenSummary>> | null;
-type Series = Awaited<ReturnType<typeof getTokenSeries>> | null;
-type Markets = Awaited<ReturnType<typeof getTokenMarkets>> | null;
+import {
+  getMarketPrice,
+  getTokenOhlcvByToken,
+  getTokenVenues,
+  pickBestMarketIdFromVenues,
+  searchTokens,
+} from '../../lib/api';
 
 export default function TokenTerminalPage() {
   const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:3333';
   const [selectedTokenId, setSelectedTokenId] = useState<string | null>(null);
-  const [summary, setSummary] = useState<Summary>(null);
-  const [series, setSeries] = useState<Series>(null);
-  const [markets, setMarkets] = useState<Markets>(null);
+  const [tokenInfo, setTokenInfo] = useState<any | null>(null);
+  const [venues, setVenues] = useState<any[] | null>(null);
+  const [bestMarketId, setBestMarketId] = useState<string | null>(null);
+  const [price, setPrice] = useState<any | null>(null);
+  const [seriesPoints, setSeriesPoints] = useState<Array<{ ts: number; price: number }>>([]);
+  const [stats, setStats] = useState<any | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -28,23 +33,12 @@ export default function TokenTerminalPage() {
     const load = async () => {
       setLoading(true);
       setError(null);
-      const [s, p, m] = await Promise.all([
-        getTokenSummary(apiBaseUrl, selectedTokenId, controller.signal),
-        getTokenSeries(apiBaseUrl, selectedTokenId, controller.signal),
-        getTokenMarkets(apiBaseUrl, selectedTokenId, controller.signal),
-      ]);
+      const v = await getTokenVenues(apiBaseUrl, selectedTokenId, controller.signal);
       if (!controller.signal.aborted) {
-        setSummary(s);
-        setSeries(p);
-        if (m?.markets) {
-          setMarkets({ markets: m.markets ?? [] });
-        } else if (s?.markets) {
-          setMarkets({ markets: s.markets ?? [] });
-        } else {
-          setMarkets(null);
-        }
+        setVenues(Array.isArray(v) ? v : []);
+        setBestMarketId(pickBestMarketIdFromVenues(Array.isArray(v) ? v : []));
+        setStats((prev: any) => ({ ...prev, marketsCount: Array.isArray(v) ? v.length : 0 }));
         setLoading(false);
-        if (!s) setError('Token summary not available');
       }
     };
     load();
@@ -52,13 +46,18 @@ export default function TokenTerminalPage() {
   }, [apiBaseUrl, selectedTokenId]);
 
   useEffect(() => {
-    if (!selectedTokenId) return;
+    if (!selectedTokenId || !bestMarketId) return;
     let timer: ReturnType<typeof setInterval> | undefined;
     const tick = async () => {
-      const s = await getTokenSummary(apiBaseUrl, selectedTokenId);
-      if (s) {
-        setSummary((prev) => (prev ? { ...prev, price: s.price ?? prev.price, stats: s.stats ?? prev.stats } : s));
-        if (s.markets?.length) setMarkets({ markets: s.markets });
+      const p = await getMarketPrice(apiBaseUrl, bestMarketId);
+      if (p) {
+        setPrice(p);
+        if (p.ts) {
+          setStats((prev: any) => ({ ...prev, freshnessSeconds: Math.floor((Date.now() - p.ts) / 1000) }));
+        }
+        if (p.volume24h) {
+          setStats((prev: any) => ({ ...prev, volume24h: p.volume24h }));
+        }
       }
     };
     tick();
@@ -66,14 +65,33 @@ export default function TokenTerminalPage() {
     return () => {
       if (timer) clearInterval(timer);
     };
-  }, [apiBaseUrl, selectedTokenId]);
+  }, [apiBaseUrl, selectedTokenId, bestMarketId]);
 
   useEffect(() => {
     if (!selectedTokenId) return;
     let timer: ReturnType<typeof setInterval> | undefined;
     const tick = async () => {
-      const p = await getTokenSeries(apiBaseUrl, selectedTokenId);
-      if (p) setSeries(p);
+      const res = await getTokenOhlcvByToken(apiBaseUrl, selectedTokenId, '1m', 1800);
+      const candles = res?.candles ?? [];
+      const pts = candles
+        .map((c: any) => ({
+          ts: (c.time ?? c.ts ?? 0) * (c.time && c.time < 10_000_000_000 ? 1000 : 1),
+          price: c.close ?? c.last ?? c.price ?? null,
+          high: c.high,
+          low: c.low,
+          volume: c.volume,
+        }))
+        .filter((p: any) => p.price !== null && p.ts);
+      const cutoff = Date.now() - 30 * 60 * 1000;
+      setSeriesPoints(pts.filter((p: any) => p.ts >= cutoff));
+      if (candles.length) {
+        setStats((prev: any) => ({
+          ...prev,
+          high24h: Math.max(...candles.map((c: any) => c.high ?? 0)),
+          low24h: Math.min(...candles.map((c: any) => c.low ?? 0)),
+          volume24h: candles.reduce((acc: number, c: any) => acc + (c.volume ?? 0), 0),
+        }));
+      }
     };
     tick();
     timer = setInterval(tick, 10_000);
@@ -82,7 +100,23 @@ export default function TokenTerminalPage() {
     };
   }, [apiBaseUrl, selectedTokenId]);
 
-  const displayMarkets = useMemo(() => markets?.markets ?? summary?.markets ?? [], [markets, summary]);
+  useEffect(() => {
+    if (selectedTokenId) return;
+    const controller = new AbortController();
+    const bootstrap = async () => {
+      const res = await searchTokens(apiBaseUrl, 'BTC', 10, controller.signal);
+      const items = (res?.items ?? []).filter((i) => i.symbol?.toUpperCase() === 'BTC');
+      const pick = items[0] ?? res?.items?.[0];
+      if (pick) {
+        setSelectedTokenId(pick.tokenId);
+        setTokenInfo(pick);
+      }
+    };
+    bootstrap();
+    return () => controller.abort();
+  }, [apiBaseUrl, selectedTokenId]);
+
+  const displayMarkets = useMemo(() => mapVenuesToRows(venues ?? []), [venues]);
 
   return (
     <section className="space-y-6">
@@ -94,18 +128,27 @@ export default function TokenTerminalPage() {
         <div className="text-xs text-slate-500">API: {apiBaseUrl}</div>
       </div>
 
-      <TokenSearch apiBaseUrl={apiBaseUrl} onSelect={setSelectedTokenId} />
+      <TokenSearch
+        apiBaseUrl={apiBaseUrl}
+        onSelect={(tokenId, token) => {
+          setSelectedTokenId(tokenId);
+          if (token) setTokenInfo(token);
+          setPrice(null);
+          setSeriesPoints([]);
+          setStats(null);
+        }}
+      />
 
       {loading && <p className="text-sm text-slate-400">Loading token data…</p>}
       {error && <p className="text-sm text-rose-400">{error}</p>}
 
-      {summary?.token && (
+      {tokenInfo && (
         <div className="space-y-4">
-          <TokenHeader token={summary.token} />
+          <TokenHeader token={tokenInfo} />
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
             <div className="space-y-4 lg:col-span-2">
-              <TokenPriceCard price={summary.price} stats={summary.stats} />
-              <TokenStatsGrid stats={summary.stats} />
+              <TokenPriceCard price={price} stats={stats ?? { marketsCount: displayMarkets.length }} />
+              <TokenStatsGrid stats={{ ...(stats ?? {}), marketsCount: displayMarkets.length }} />
             </div>
             <div className="bg-slate-900 border border-slate-800 rounded-xl p-4">
               <div className="flex items-center justify-between mb-3">
@@ -114,7 +157,7 @@ export default function TokenTerminalPage() {
                   <div className="text-lg font-semibold">Last 30 minutes</div>
                 </div>
               </div>
-              <TokenRealtimeChart points={series?.points ?? []} />
+              <TokenRealtimeChart points={seriesPoints} />
             </div>
           </div>
 
@@ -129,4 +172,18 @@ export default function TokenTerminalPage() {
       )}
     </section>
   );
+}
+
+function mapVenuesToRows(venues: any[]) {
+  return (venues ?? []).map((v) => ({
+    marketId: v.marketId ?? v.id ?? '',
+    venue: v.venue ?? v.provider ?? v.source ?? 'unknown',
+    pair: v.pair ?? v.symbol ?? `${v.baseSymbol ?? ''}/${v.quote ?? ''}`,
+    quote: v.quote ?? v.quoteSymbol ?? '',
+    last: v.last ?? v.price ?? null,
+    volume24h: v.volume24h ?? v.volume ?? null,
+    liquidityScore: v.liquidityScore ?? null,
+    freshnessSeconds: v.freshnessSeconds ?? null,
+    ws: v.ws ?? v.wsSupported ?? false,
+  }));
 }

@@ -1,6 +1,6 @@
 'use client';
 
-type Price = { value: number; ts: number; currency: string };
+type Price = { value?: number; ts?: number; currency?: string; last?: number; mark?: number; mid?: number; bestBid?: number; bestAsk?: number };
 type Stats = {
   change1m?: number;
   change5m?: number;
@@ -10,11 +10,14 @@ type Stats = {
 };
 
 export function TokenPriceCard({ price, stats }: { price?: Price; stats?: Stats }) {
-  const updatedAgo = stats?.freshnessSeconds ?? (price ? Math.floor((Date.now() - price.ts) / 1000) : null);
+  const chosen = pickPrice(price);
+  const updatedAgo = stats?.freshnessSeconds ?? (price?.ts ? Math.floor((Date.now() - price.ts) / 1000) : null);
   return (
     <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 space-y-3">
       <div className="text-sm text-slate-400">Price</div>
-      <div className="text-3xl font-bold text-slate-100">{price ? formatPrice(price.value) : 'N/A'} {price?.currency ?? ''}</div>
+      <div className="text-3xl font-bold text-slate-100">
+        {chosen !== null ? formatPrice(chosen) : 'N/A'} {price?.currency ?? ''}
+      </div>
       <div className="flex flex-wrap gap-3 text-sm">
         {renderChange('1m', stats?.change1m)}
         {renderChange('5m', stats?.change5m)}
@@ -39,4 +42,9 @@ function renderChange(label: string, value?: number) {
 function formatPrice(value: number) {
   const opts = { minimumFractionDigits: value > 1 ? 2 : 6, maximumFractionDigits: value > 1 ? 2 : 8 };
   return new Intl.NumberFormat('en-US', opts).format(value);
+}
+
+function pickPrice(price?: Price) {
+  if (!price) return null;
+  return price.mid ?? price.mark ?? price.last ?? price.value ?? price.bestAsk ?? price.bestBid ?? null;
 }
