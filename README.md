@@ -1,3 +1,11 @@
+<div align="center">
+
+<img src="https://capsule-render.vercel.app/api?type=waving&color=gradient&customColorList=6,11,20&height=160&section=header&text=AIRapiserv&fontSize=50&fontColor=fff&animation=fadeIn&fontAlignY=38" width="100%"/>
+
+<img src="https://skillicons.dev/icons?i=ts,js,bash,css,nodejs&theme=dark" alt="Tech stack"/>
+
+</div>
+
 # AIRapiserv
 
 AIRapiserv is the market-data gateway consumed by AIRTrack. It exposes a stable REST/WebSocket interface while orchestrating multiple providers, normalising events and persisting them in three specialised databases.
