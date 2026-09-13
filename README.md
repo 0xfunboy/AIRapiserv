@@ -292,3 +292,7 @@ sudo -u postgres psql -v ON_ERROR_STOP=1 -c "CREATE DATABASE airapiserv OWNER ai
 2. Configure CI/CD and automated tests.
 3. Harden security (TLS termination, WAF, RBAC).
 4. Extend ingestion connectors (OKX, Coinbase, Kraken, etc.).
+
+## Licensing
+
+Licensing scope and preserved third-party permissions are documented in [LICENSING.md](LICENSING.md). The [0xfunboy Non-Commercial License](LICENSE.md) covers eligible original material only.
